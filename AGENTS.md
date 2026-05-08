@@ -80,3 +80,7 @@ All system and server routes are JWT-protected via `JwtGuard.protect(handler, sc
 ### EventBus and AggregateRoot
 
 Present in `src/shared/` but not yet wired into the system. Reserved for future event-driven features.
+
+### Persistence
+- Persistent data (files, databases) must be stored inside `data/`.
+- Application configuration stored in `config.json`.

@@ -56,7 +56,9 @@ export function createContainer(): AppContainer {
 
   const jwtSecret = Bun.env.JWT_SECRET;
   if (!jwtSecret) {
-    logger.warn("JWT_SECRET environment variable is not set. Token verification will fail for all requests.");
+    logger.warn(
+      "JWT_SECRET environment variable is not set. Token verification will fail for all requests.",
+    );
   }
 
   const guard = new JwtGuard({
@@ -70,26 +72,41 @@ export function createContainer(): AppContainer {
 
   commandBus.register(COPY_PATH_COMMAND, new CopyPathHandler(systemFiles));
   commandBus.register(DELETE_PATH_COMMAND, new DeletePathHandler(systemFiles));
-  commandBus.register(EXECUTE_TERMINAL_COMMAND, new ExecuteTerminalHandler(terminal));
+  commandBus.register(
+    EXECUTE_TERMINAL_COMMAND,
+    new ExecuteTerminalHandler(terminal),
+  );
   commandBus.register(MOVE_PATH_COMMAND, new MovePathHandler(systemFiles));
   commandBus.register(SED_COMMAND, new SedHandler(systemFiles));
 
   queryBus.register(AWK_QUERY, new AwkHandler(systemFiles));
   queryBus.register(GLOB_FILES_QUERY, new GlobFilesHandler(systemFiles));
   queryBus.register(GREP_FILES_QUERY, new GrepFilesHandler(systemFiles));
-  queryBus.register(LIST_DIRECTORY_QUERY, new ListDirectoryHandler(systemFiles));
+  queryBus.register(
+    LIST_DIRECTORY_QUERY,
+    new ListDirectoryHandler(systemFiles),
+  );
   queryBus.register(READ_FILE_QUERY, new ReadFileHandler(systemFiles));
 
   // Server module
-  const pidDir = Bun.env.PID_DIR ?? path.join(process.cwd(), "pids");
+  const pidDir = Bun.env.PID_DIR ?? path.join(process.cwd(), "data/pids");
   const serverProcess = new BunServerProcessAdapter(logger, pidDir);
   const serverRegistry = new InMemoryServerRegistryAdapter();
 
-  commandBus.register(SPAWN_SERVER_COMMAND, new SpawnServerHandler(serverProcess, serverRegistry));
-  commandBus.register(KILL_SERVER_COMMAND, new KillServerHandler(serverProcess, serverRegistry));
+  commandBus.register(
+    SPAWN_SERVER_COMMAND,
+    new SpawnServerHandler(serverProcess, serverRegistry),
+  );
+  commandBus.register(
+    KILL_SERVER_COMMAND,
+    new KillServerHandler(serverProcess, serverRegistry),
+  );
 
   queryBus.register(LIST_SERVERS_QUERY, new ListServersHandler(serverRegistry));
-  queryBus.register(GET_SERVER_STATUS_QUERY, new GetServerStatusHandler(serverRegistry, serverProcess));
+  queryBus.register(
+    GET_SERVER_STATUS_QUERY,
+    new GetServerStatusHandler(serverRegistry, serverProcess),
+  );
 
   return {
     commandBus,

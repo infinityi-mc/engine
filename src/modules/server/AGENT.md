@@ -120,7 +120,7 @@ The module uses PID files as the source of truth for crash recovery:
 
 | Env Var | Required | Default | Description |
 |---------|----------|---------|-------------|
-| `PID_DIR` | No | `./pids` | Directory for PID files |
+| `PID_DIR` | No | `./data/pids` | Directory for PID files |
 
 ### Reconcile Behavior
 
