@@ -1,3 +1,4 @@
+import path from "node:path";
 import { CommandBus } from "../shared/application/command-bus";
 import { QueryBus } from "../shared/application/query-bus";
 import { JwtGuard } from "../shared/http/jwt-guard";
@@ -25,12 +26,27 @@ import { READ_FILE_QUERY } from "../modules/system/application/queries/read-file
 import { ReadFileHandler } from "../modules/system/application/queries/read-file.handler";
 import { NodeSystemFilesAdapter } from "../modules/system/infrastructure/filesystem/node-system-files.adapter";
 import { BunTerminalAdapter } from "../modules/system/infrastructure/terminal/bun-terminal.adapter";
+import { SPAWN_SERVER_COMMAND } from "../modules/server/application/commands/spawn-server.command";
+import { SpawnServerHandler } from "../modules/server/application/commands/spawn-server.handler";
+import { KILL_SERVER_COMMAND } from "../modules/server/application/commands/kill-server.command";
+import { KillServerHandler } from "../modules/server/application/commands/kill-server.handler";
+import { LIST_SERVERS_QUERY } from "../modules/server/application/queries/list-servers.query";
+import { ListServersHandler } from "../modules/server/application/queries/list-servers.handler";
+import { GET_SERVER_STATUS_QUERY } from "../modules/server/application/queries/get-server-status.query";
+import { GetServerStatusHandler } from "../modules/server/application/queries/get-server-status.handler";
+import { BunServerProcessAdapter } from "../modules/server/infrastructure/process/bun-server-process.adapter";
+import { InMemoryServerRegistryAdapter } from "../modules/server/infrastructure/registry/in-memory-server-registry.adapter";
+
+import type { ServerProcessPort } from "../modules/server/domain/ports/server-process.port";
+import type { ServerRegistryPort } from "../modules/server/domain/ports/server-registry.port";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
   readonly queryBus: QueryBus;
   readonly guard: JwtGuard;
   readonly logger: LoggerPort;
+  readonly serverProcess: ServerProcessPort;
+  readonly serverRegistry: ServerRegistryPort;
 }
 
 export function createContainer(): AppContainer {
@@ -40,7 +56,7 @@ export function createContainer(): AppContainer {
 
   const jwtSecret = Bun.env.JWT_SECRET;
   if (!jwtSecret) {
-    logger.warn("JWT_SECRET environment variable is not set. Authentication will be disabled.");
+    logger.warn("JWT_SECRET environment variable is not set. Token verification will fail for all requests.");
   }
 
   const guard = new JwtGuard({
@@ -64,10 +80,23 @@ export function createContainer(): AppContainer {
   queryBus.register(LIST_DIRECTORY_QUERY, new ListDirectoryHandler(systemFiles));
   queryBus.register(READ_FILE_QUERY, new ReadFileHandler(systemFiles));
 
+  // Server module
+  const pidDir = Bun.env.PID_DIR ?? path.join(process.cwd(), "pids");
+  const serverProcess = new BunServerProcessAdapter(logger, pidDir);
+  const serverRegistry = new InMemoryServerRegistryAdapter();
+
+  commandBus.register(SPAWN_SERVER_COMMAND, new SpawnServerHandler(serverProcess, serverRegistry));
+  commandBus.register(KILL_SERVER_COMMAND, new KillServerHandler(serverProcess, serverRegistry));
+
+  queryBus.register(LIST_SERVERS_QUERY, new ListServersHandler(serverRegistry));
+  queryBus.register(GET_SERVER_STATUS_QUERY, new GetServerStatusHandler(serverRegistry, serverProcess));
+
   return {
     commandBus,
     queryBus,
     guard,
     logger,
+    serverProcess,
+    serverRegistry,
   };
 }

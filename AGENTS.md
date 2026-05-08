@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to WARP (warp.dev) when working with code in this repository.
+This file provides guidance when working with code in this repository.
 
 ## Commands
 
@@ -40,12 +40,13 @@ HTTP route (infrastructure)
 
 - **Domain** — Ports (interfaces), domain errors, entities, events. No imports from application or infrastructure. No framework imports (`Bun`, `jose`, `node:*`).
 - **Application** — Commands, queries, handlers. Depends on domain ports, never on concrete adapters or HTTP types.
-- **Infrastructure** — HTTP routes, adapters (filesystem, terminal). Can depend on application and domain.
+- **Infrastructure** — HTTP routes, adapters (filesystem, terminal, process, registry). Can depend on application and domain.
 - **Bootstrap** — `container.ts` wires everything together: instantiates buses, adapters, registers handlers.
 
 ### CQRS rules
 
-- Commands mutate state and return `void`. Queries return data and never mutate.
+- Commands mutate state. Queries return data. Commands may return data when the caller needs immediate feedback (e.g., process metadata from execution, PID from spawn). This project uses CQRS for intent separation, not strict return-type enforcement.
+- Queries should be read-only, but may perform staleness correction (e.g., updating a "running" status to "crashed" when the process is dead) as an intentional side effect.
 - Command/query types are string-const discriminants (e.g. `"system.files.copy"`).
 - Each command has a `.command.ts` + `.handler.ts` pair; each query has a `.query.ts` + `.handler.ts` pair.
 
@@ -59,7 +60,7 @@ HTTP route (infrastructure)
 
 ### Auth
 
-All system routes are JWT-protected via `JwtGuard.protect(handler, scope)`. Tokens carry a `scope` claim with space-separated scope strings. Scopes are defined in `src/modules/system/infrastructure/http/scopes.ts`. If `JWT_SECRET` is not set, auth is disabled (routes accept unauthenticated requests).
+All system and server routes are JWT-protected via `JwtGuard.protect(handler, scope)`. Tokens carry a `scope` claim with space-separated scope strings. Scopes are defined per module (e.g., `src/modules/system/infrastructure/http/scopes.ts`, `src/modules/server/infrastructure/http/scopes.ts`). If `JWT_SECRET` is not set, the guard uses an empty secret which causes all token verification to fail — effectively blocking all authenticated routes, not disabling auth.
 
 ### Observability
 

@@ -59,7 +59,7 @@ Map files to layers by path: `src/domain/`, `src/application/`, `src/infrastruct
 
 ## Step 3: Consolidate
 
-1. **Deduplicate** — merge same issue across lenses.
+1. **Deduplicate** — merge same issue across lenses. check `.agents/skills/code-reviewer/invalid-findings.md`
 2. **Severity:**
    - **[CRITICAL]** — crash, data loss, security breach, architectural corruption
    - **[WARNING]** — fragility, tech debt, layer smell, missing guard, perf concern
@@ -73,9 +73,11 @@ Map files to layers by path: `src/domain/`, `src/application/`, `src/infrastruct
 
 5. **Summary:** files changed, severity counts, 1-2 sentence assessment.
 
+[!IMPORTANT] If no findings, state "no issues found" and stop here.
+
 ## Step 4: Export
 
-Write to `g:\engine\.agents\skills\code-reviewer\review-findings.md`:
+Write to `.agents\skills\code-reviewer\review-findings.md`:
 
 1. **Header** — `# Code Review Findings` + `YYYY-MM-DD HH:MM UTC`
 2. **Summary** — files, counts, assessment
@@ -83,4 +85,3 @@ Write to `g:\engine\.agents\skills\code-reviewer\review-findings.md`:
 
 Overwrite on each run.
 ---
-

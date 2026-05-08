@@ -2,6 +2,7 @@ import { createContainer } from "./bootstrap/container";
 import { jsonResponse } from "./shared/http/json-response";
 import { Router } from "./shared/http/router";
 import { registerSystemRoutes } from "./modules/system/infrastructure/http/system-routes";
+import { registerServerRoutes } from "./modules/server/infrastructure/http/server-routes";
 
 const port = Number(Bun.env.PORT ?? 3000);
 const hostname = Bun.env.HOST ?? "localhost";
@@ -18,6 +19,20 @@ registerSystemRoutes(
   container.guard,
   container.logger,
 );
+registerServerRoutes(
+  router,
+  container.commandBus,
+  container.queryBus,
+  container.guard,
+  container.logger,
+);
+
+// Reconcile server instances from PID files (crash recovery)
+container.serverProcess.reconcile(container.serverRegistry).catch((error) => {
+  container.logger.error("server.reconcile_failed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+});
 
 const server = Bun.serve({
   hostname,

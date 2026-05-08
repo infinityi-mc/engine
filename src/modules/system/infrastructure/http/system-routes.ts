@@ -5,6 +5,8 @@ import type { JwtGuard } from "../../../../shared/http/jwt-guard";
 import { getErrorMessage } from "../../../../shared/observability/error-utils";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import type { Router } from "../../../../shared/http/router";
+import { parseJson, requiredString, optionalString, optionalStringProperty, optionalStringArrayProperty, optionalRecordProperty, isRecord } from "../../../../shared/http/route-helpers";
+import type { JsonBody } from "../../../../shared/http/route-helpers";
 import { SCOPES } from "./scopes";
 import { CopyPathCommand } from "../../application/commands/copy-path.command";
 import { DeletePathCommand } from "../../application/commands/delete-path.command";
@@ -21,8 +23,6 @@ import { UnsupportedToolError } from "../../domain/errors/unsupported-tool.error
 import type { FileEntry, FileReadResult, GrepMatch } from "../../domain/ports/filesystem.port";
 import type { TerminalResult } from "../../domain/ports/terminal.port";
 
-type JsonBody = Record<string, unknown>;
-const maxJsonBodyBytes = 1_048_576;
 const validEncodings = ["utf8", "utf-8", "utf16le", "utf-16le", "latin1", "base64", "base64url", "hex", "ascii"] as const;
 type ValidEncoding = typeof validEncodings[number];
 
@@ -302,66 +302,6 @@ export function registerSystemRoutes(
   }, SCOPES.TERMINAL_EXECUTE));
 }
 
-async function parseJson(request: Request): Promise<{ ok: true; body: JsonBody } | { ok: false; response: Response }> {
-  const contentLength = Number(request.headers.get("content-length") ?? 0);
-
-  if (contentLength > maxJsonBodyBytes) {
-    return { ok: false, response: jsonResponse({ error: "JSON body is too large" }, { status: 413 }) };
-  }
-
-  try {
-    const body = await readBodyWithLimit(request);
-
-    if (!body.ok) {
-      return body;
-    }
-
-    const value = JSON.parse(body.text) as unknown;
-    return isRecord(value)
-      ? { ok: true, body: value }
-      : { ok: false, response: jsonResponse({ error: "JSON body must be an object" }, { status: 400 }) };
-  } catch {
-    return { ok: false, response: jsonResponse({ error: "Invalid JSON body" }, { status: 400 }) };
-  }
-}
-
-async function readBodyWithLimit(request: Request): Promise<{ ok: true; text: string } | { ok: false; response: Response }> {
-  if (!request.body) {
-    return { ok: true, text: "" };
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    totalBytes += value.byteLength;
-
-    if (totalBytes > maxJsonBodyBytes) {
-      await reader.cancel();
-      return { ok: false, response: jsonResponse({ error: "JSON body is too large" }, { status: 413 }) };
-    }
-
-    chunks.push(value);
-  }
-
-  const buffer = new Uint8Array(totalBytes);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    buffer.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return { ok: true, text: new TextDecoder().decode(buffer) };
-}
-
 async function handleErrors(action: () => Promise<Response>, logger: LoggerPort): Promise<Response> {
   try {
     return await action();
@@ -381,20 +321,6 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
 
     return jsonResponse({ error: "Internal Server Error" }, { status: 500 });
   }
-}
-
-function requiredString(body: JsonBody, key: string): { ok: true; value: string } | { ok: false; response: Response } {
-  const value = body[key];
-
-  if (typeof value !== "string") {
-    return { ok: false, response: jsonResponse({ error: `${key} must be a string` }, { status: 400 }) };
-  }
-
-  return { ok: true, value };
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 function optionalEncoding(value: unknown): BufferEncoding | undefined {
@@ -417,11 +343,6 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
-function optionalStringProperty<TKey extends string>(key: TKey, value: unknown): Partial<Record<TKey, string>> {
-  const stringValue = optionalString(value);
-  return stringValue !== undefined ? { [key]: stringValue } as Record<TKey, string> : {};
-}
-
 function optionalBooleanProperty<TKey extends string>(key: TKey, value: unknown): Partial<Record<TKey, boolean>> {
   const booleanValue = optionalBoolean(value);
   return booleanValue !== undefined ? { [key]: booleanValue } as Record<TKey, boolean> : {};
@@ -430,25 +351,4 @@ function optionalBooleanProperty<TKey extends string>(key: TKey, value: unknown)
 function optionalNumberProperty<TKey extends string>(key: TKey, value: unknown): Partial<Record<TKey, number>> {
   const numberValue = optionalNumber(value);
   return numberValue !== undefined ? { [key]: numberValue } as Record<TKey, number> : {};
-}
-
-function optionalStringArrayProperty<TKey extends string>(key: TKey, value: unknown): Partial<Record<TKey, string[]>> {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    return {};
-  }
-
-  return { [key]: value } as Record<TKey, string[]>;
-}
-
-function optionalRecordProperty<TKey extends string>(key: TKey, value: unknown): Partial<Record<TKey, Record<string, string>>> {
-  if (!isRecord(value)) {
-    return {};
-  }
-
-  const entries = Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string");
-  return { [key]: Object.fromEntries(entries) } as Record<TKey, Record<string, string>>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

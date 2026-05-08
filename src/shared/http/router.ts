@@ -19,6 +19,10 @@ export class Router {
     this.add("POST", pathname, handler);
   }
 
+  delete(pathname: string, handler: RouteHandler): void {
+    this.add("DELETE", pathname, handler);
+  }
+
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const allowedMethods = new Set<string>();
