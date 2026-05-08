@@ -63,7 +63,7 @@ All system routes are JWT-protected via `JwtGuard.protect(handler, scope)`. Toke
 
 ### Observability
 
-`LoggerPort` interface with `ConsoleLoggerAdapter` producing structured JSON to stdout/stderr. Logs intentionally exclude sensitive data (file contents, terminal stdout/stderr, env vars, full args, sed/awk scripts). Set `LOG_LEVEL` env var to `debug`/`info`/`warn`/`error`.
+`LoggerPort` interface with `ConsoleLoggerAdapter` producing human-readable, terminal-colored logs to stdout/stderr. Logs intentionally exclude sensitive data (file contents, terminal stdout/stderr, env vars, full args, sed/awk scripts). Set `LOG_LEVEL` env var to `debug`/`info`/`warn`/`error`.
 
 ### Key conventions
 
