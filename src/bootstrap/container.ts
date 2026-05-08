@@ -39,6 +39,30 @@ import { InMemoryServerRegistryAdapter } from "../modules/server/infrastructure/
 
 import type { ServerProcessPort } from "../modules/server/domain/ports/server-process.port";
 import type { ServerRegistryPort } from "../modules/server/domain/ports/server-registry.port";
+import { CREATE_MINECRAFT_SERVER_COMMAND } from "../modules/minecraft/application/commands/create-minecraft-server.command";
+import { CreateMinecraftServerHandler } from "../modules/minecraft/application/commands/create-minecraft-server.handler";
+import { START_MINECRAFT_SERVER_COMMAND } from "../modules/minecraft/application/commands/start-minecraft-server.command";
+import { StartMinecraftServerHandler } from "../modules/minecraft/application/commands/start-minecraft-server.handler";
+import { STOP_MINECRAFT_SERVER_COMMAND } from "../modules/minecraft/application/commands/stop-minecraft-server.command";
+import { StopMinecraftServerHandler } from "../modules/minecraft/application/commands/stop-minecraft-server.handler";
+import { DELETE_MINECRAFT_SERVER_COMMAND } from "../modules/minecraft/application/commands/delete-minecraft-server.command";
+import { DeleteMinecraftServerHandler } from "../modules/minecraft/application/commands/delete-minecraft-server.handler";
+import { SEND_MINECRAFT_COMMAND_COMMAND } from "../modules/minecraft/application/commands/send-minecraft-command.command";
+import { SendMinecraftCommandHandler } from "../modules/minecraft/application/commands/send-minecraft-command.handler";
+import { LIST_MINECRAFT_SERVERS_QUERY } from "../modules/minecraft/application/queries/list-minecraft-servers.query";
+import { ListMinecraftServersHandler } from "../modules/minecraft/application/queries/list-minecraft-servers.handler";
+import { GET_MINECRAFT_SERVER_QUERY } from "../modules/minecraft/application/queries/get-minecraft-server.query";
+import { GetMinecraftServerHandler } from "../modules/minecraft/application/queries/get-minecraft-server.handler";
+import { STREAM_MINECRAFT_LOGS_QUERY } from "../modules/minecraft/application/queries/stream-minecraft-logs.query";
+import { StreamMinecraftLogsHandler } from "../modules/minecraft/application/queries/stream-minecraft-logs.handler";
+import { JsonMinecraftServerRepositoryAdapter } from "../modules/minecraft/infrastructure/persistence/json-minecraft-server-repository.adapter";
+import { BunMinecraftStdinAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-stdin.adapter";
+import { BunMinecraftLogAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-log.adapter";
+import { waitForProcessExit } from "../modules/minecraft/infrastructure/process/wait-for-exit";
+
+import type { MinecraftServerRepositoryPort } from "../modules/minecraft/domain/ports/minecraft-server-repository.port";
+import type { MinecraftStdinPort } from "../modules/minecraft/domain/ports/minecraft-stdin.port";
+import type { MinecraftLogPort } from "../modules/minecraft/domain/ports/minecraft-log.port";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -47,6 +71,9 @@ export interface AppContainer {
   readonly logger: LoggerPort;
   readonly serverProcess: ServerProcessPort;
   readonly serverRegistry: ServerRegistryPort;
+  readonly minecraftRepository: MinecraftServerRepositoryPort;
+  readonly minecraftStdin: MinecraftStdinPort;
+  readonly minecraftLog: MinecraftLogPort;
 }
 
 export function createContainer(): AppContainer {
@@ -108,6 +135,47 @@ export function createContainer(): AppContainer {
     new GetServerStatusHandler(serverRegistry, serverProcess),
   );
 
+  // Minecraft module
+  const dataDir = Bun.env.DATA_DIR ?? path.join(process.cwd(), "data");
+  const minecraftRepository = new JsonMinecraftServerRepositoryAdapter(logger, dataDir);
+  const minecraftStdin = new BunMinecraftStdinAdapter(serverProcess);
+  const minecraftLog = new BunMinecraftLogAdapter(serverProcess);
+  const minecraftWaitForExit = waitForProcessExit(serverProcess);
+
+  commandBus.register(
+    CREATE_MINECRAFT_SERVER_COMMAND,
+    new CreateMinecraftServerHandler(minecraftRepository),
+  );
+  commandBus.register(
+    START_MINECRAFT_SERVER_COMMAND,
+    new StartMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry),
+  );
+  commandBus.register(
+    STOP_MINECRAFT_SERVER_COMMAND,
+    new StopMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry, minecraftStdin, minecraftWaitForExit),
+  );
+  commandBus.register(
+    DELETE_MINECRAFT_SERVER_COMMAND,
+    new DeleteMinecraftServerHandler(minecraftRepository, commandBus),
+  );
+  commandBus.register(
+    SEND_MINECRAFT_COMMAND_COMMAND,
+    new SendMinecraftCommandHandler(minecraftRepository, serverRegistry, minecraftStdin),
+  );
+
+  queryBus.register(
+    LIST_MINECRAFT_SERVERS_QUERY,
+    new ListMinecraftServersHandler(minecraftRepository),
+  );
+  queryBus.register(
+    GET_MINECRAFT_SERVER_QUERY,
+    new GetMinecraftServerHandler(minecraftRepository, serverRegistry),
+  );
+  queryBus.register(
+    STREAM_MINECRAFT_LOGS_QUERY,
+    new StreamMinecraftLogsHandler(minecraftRepository, serverRegistry, minecraftLog),
+  );
+
   return {
     commandBus,
     queryBus,
@@ -115,5 +183,8 @@ export function createContainer(): AppContainer {
     logger,
     serverProcess,
     serverRegistry,
+    minecraftRepository,
+    minecraftStdin,
+    minecraftLog,
   };
 }

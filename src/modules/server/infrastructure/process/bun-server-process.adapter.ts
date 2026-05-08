@@ -176,6 +176,16 @@ export class BunServerProcessAdapter implements ServerProcessPort {
     }
   }
 
+  /**
+   * Returns the tracked subprocess for a given instance ID.
+   * Used by consumer modules (e.g., minecraft) to access stdin/stdout/stderr pipes.
+   * Returns undefined if the instance is not tracked.
+   */
+  getSubprocess(instanceId: string): ReturnType<typeof Bun.spawn> | undefined {
+    const tracked = this.processes.get(instanceId);
+    return tracked?.subprocess;
+  }
+
   async reconcile(registry: ServerRegistryPort): Promise<void> {
     try {
       await mkdir(this.pidDir, { recursive: true });
