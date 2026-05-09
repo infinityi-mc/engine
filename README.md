@@ -1,168 +1,101 @@
-# Bun Event-Driven Hexagonal CQRS Template
+# engine
 
-A small Bun + TypeScript HTTP API template using native `Bun.serve`, Event-Driven Architecture, Hexagonal Architecture, and CQRS.
+A local-first API server that gives AI agents hands — file access, terminal execution, process management, and code execution — all through a clean HTTP interface.
 
-## Quick Start
+Built with [Bun](https://bun.sh) and TypeScript. No framework, no unnecessary dependencies.
+
+## What it does
+
+engine exposes five modules as HTTP endpoints:
+
+- **System** — read, write, search, and manipulate files. Run terminal commands.
+- **Server** — spawn and manage long-running processes.
+- **Minecraft** — create, start, stop, and send commands to Minecraft servers.
+- **LLM** — communicate with language models (Anthropic, OpenAI, Google, OpenRouter).
+- **Agent** — orchestrate multi-step AI sessions with tool calling. Ships with a `run_python` tool.
+
+Every route is JWT-protected with fine-grained scopes. Config is validated on startup and hot-reloaded at runtime.
+
+## Getting started
 
 ```bash
 bun install
 bun run dev
 ```
 
-The server starts on `http://localhost:3000` by default. Override it with `PORT`.
+The server starts at `http://localhost:3000`. To change it:
 
 ```bash
 PORT=4000 bun run dev
 ```
 
-## Scripts
+### Configuration
+
+Copy the example config and fill in your API keys:
 
 ```bash
-bun run dev        # Start with watch mode
-bun run start      # Start normally
-bun test           # Run tests
-bun run typecheck  # Run TypeScript checks
+cp .env.example .env
 ```
 
-## Endpoints
+Then edit `config.json` with your LLM provider keys. API keys can be literal values or environment variable names — engine resolves them at runtime.
 
-```http
-GET /health
+### Authentication
+
+Set a JWT secret before using any protected route:
+
+```bash
+export JWT_SECRET=your-secret-here
 ```
 
-System discovery endpoints:
+Without this, all authenticated requests will be rejected. The `/health` endpoint is the only exception.
 
-```http
-POST /system/files/glob
-POST /system/files/grep
-POST /system/files/list
-POST /system/files/read
-POST /system/files/awk
+## Development
+
+```bash
+bun run dev        # start with file watching
+bun run start      # start without watching
+bun test           # run the test suite
+bun run typecheck  # check types
 ```
 
-System management endpoints:
-
-```http
-POST /system/files/move
-POST /system/files/copy
-POST /system/files/delete
-POST /system/files/sed
-```
-
-Terminal endpoint:
-
-```http
-POST /system/terminal/execute
-```
-
-The system module does not enforce sandboxing, path allowlists, command allowlists, or other constraints. Callers are responsible for applying those policies before using the module.
-
-`glob`, `grep`, `list`, `read`, `move`, `copy`, `delete`, and terminal execution are implemented with Bun/Node APIs and support Windows and Linux. `awk` and `sed` call the real installed tools. If the current environment does not provide those binaries, the API returns:
-
-```json
-{
-  "error": "UnsupportedTool",
-  "tool": "awk",
-  "message": "awk is not available in this environment"
-}
-```
-
-`glob` defaults to a maximum of 10,000 results. Pass `maxResults` to lower or raise that limit for a specific call.
-
-`grep` treats `pattern` as a regular expression, returns every match per line, and rejects known unsafe regex features such as nested quantifiers and backreferences.
-
-Recursive grep discovery is capped at 10,000 files and 64 directory levels by default.
-
-System route JSON bodies are limited to 1 MiB.
-
-For terminal execution, prefer `shell: false` with structured `args`. If `env` is provided, it is merged on top of the host environment so command resolution still has access to variables such as `PATH`.
-
-## Observability
-
-The project uses a `LoggerPort` with a native console adapter by default. Logs are structured JSON written to stdout/stderr and are not persisted to disk by the app.
-
-Set the minimum log level with `LOG_LEVEL`:
+Logs go to stdout/stderr. Adjust verbosity:
 
 ```bash
 LOG_LEVEL=debug bun run dev
 ```
 
-For the system module, logs intentionally include safe metadata such as operation name, duration, counts, exit code, and error type. They intentionally exclude file contents, terminal stdin/stdout/stderr, environment variables, full sed scripts, full awk programs, and full args arrays.
+## Project structure
 
-Example terminal request:
-
-```http
-POST /system/terminal/execute
-Content-Type: application/json
-
-{
-  "command": "bun",
-  "args": ["--version"],
-  "timeoutMs": 10000
-}
+```
+src/
+├── bootstrap/       dependency wiring
+├── shared/          cross-cutting: HTTP, config, logging, CQRS buses
+└── modules/
+    ├── system/      file operations + terminal
+    ├── server/      process management
+    ├── minecraft/   Minecraft server lifecycle
+    ├── llm/         LLM provider abstraction
+    └── agent/       agent orchestration + tools
 ```
 
-## Architecture
+Each module follows hexagonal architecture — domain ports define contracts, infrastructure adapters implement them, application handlers orchestrate the flow. The bootstrap layer wires everything together.
 
-```txt
-src
-├── bootstrap
-│   └── container.ts
-├── shared
-│   ├── application
-│   │   ├── command-bus.ts
-│   │   ├── event-bus.ts
-│   │   └── query-bus.ts
-│   ├── domain
-│   │   ├── aggregate-root.ts
-│   │   └── domain-event.ts
-│   └── http
-│       ├── json-response.ts
-│       └── router.ts
-└── modules
-    └── system
-        ├── domain
-        ├── application
-        └── infrastructure
-```
+## Current phase
 
-## Request Flow
+The core infrastructure is in place and functional. The system, server, minecraft, LLM, and agent modules are all wired up and responding to requests.
 
-```txt
-HTTP route
--> CommandBus or QueryBus
--> Application handler
--> Domain port
--> Infrastructure adapter
-```
+What's working:
+- All five modules with JWT-protected endpoints
+- Multi-provider LLM communication with tool calling
+- Agent orchestration with tool-use loops
+- Config hot-reloading via file watcher
+- Cross-platform support (Windows + Linux)
 
-## Boundaries
+What's next:
+- More agent tools (file operations, web requests)
+- Event-driven features (EventBus and AggregateRoot are scaffolded but not yet wired)
+- Persistent agent sessions and conversation history
 
-Domain layer:
-- Owns business rules and domain events.
-- Does not import application or infrastructure code.
+## License
 
-Application layer:
-- Owns commands, queries, handlers, and orchestration.
-- Depends on domain ports, not concrete adapters.
-
-Infrastructure layer:
-- Owns HTTP routes, persistence adapters, and external integrations.
-- Can depend on application and domain layers.
-
-Bootstrap layer:
-- Wires dependencies together in one place.
-
-## Adding A Module
-
-1. Create `src/modules/<module>/domain` for aggregates, events, and ports.
-2. Create `src/modules/<module>/application` for commands, queries, handlers, and event handlers.
-3. Create `src/modules/<module>/infrastructure` for HTTP routes and adapters.
-4. Register handlers and adapters in `src/bootstrap/container.ts`.
-5. Register routes in `src/main.ts`.
-
-## Example CQRS Flow
-
-Reading a file goes through `ReadFileQuery`, handled by `ReadFileHandler`. The handler depends on `FilesystemPort`, and the infrastructure adapter `NodeSystemFilesAdapter` performs the actual filesystem operation.
-
-Executing a terminal command goes through `ExecuteTerminalCommand`, handled by `ExecuteTerminalHandler`. The handler depends on `TerminalPort`, and `BunTerminalAdapter` performs the actual process execution.
+Private project.
