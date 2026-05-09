@@ -8,6 +8,8 @@ export interface ToolCall {
   id: string;
   type: "function";
   function: { name: string; arguments: string };
+  /** Provider-specific metadata, e.g. Gemini thought signatures. */
+  thoughtSignature?: string;
 }
 
 export interface ChatMessage {

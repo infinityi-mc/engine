@@ -26,6 +26,7 @@ interface GeminiFunctionResponse {
 interface GeminiPart {
   text?: string;
   thought?: boolean;
+  thoughtSignature?: string;
   functionCall?: GeminiFunctionCall;
   functionResponse?: GeminiFunctionResponse;
 }
@@ -85,7 +86,9 @@ export class GeminiAdapter implements LlmProviderPort {
     return this.translateResponse(data, request.provider, request.model);
   }
 
-  private buildRequestBody(request: CompletionRequest): Record<string, unknown> {
+  private buildRequestBody(
+    request: CompletionRequest,
+  ): Record<string, unknown> {
     const body: Record<string, unknown> = {};
 
     const systemMessages = request.messages.filter((m) => m.role === "system");
@@ -107,7 +110,10 @@ export class GeminiAdapter implements LlmProviderPort {
           for (const tc of msg.toolCalls) {
             let args: Record<string, unknown>;
             try {
-              args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+              args = JSON.parse(tc.function.arguments) as Record<
+                string,
+                unknown
+              >;
             } catch {
               throw new ProviderApiError(
                 request.provider,
@@ -120,6 +126,9 @@ export class GeminiAdapter implements LlmProviderPort {
                 name: tc.function.name,
                 args,
               },
+              ...(tc.thoughtSignature
+                ? { thoughtSignature: tc.thoughtSignature }
+                : {}),
             });
           }
         }
@@ -138,18 +147,29 @@ export class GeminiAdapter implements LlmProviderPort {
         }
         let response: Record<string, unknown>;
         try {
-          response = JSON.parse(msg.content ?? "{}") as Record<string, unknown>;
+          const parsed: unknown = JSON.parse(msg.content ?? "{}");
+          if (
+            parsed !== null &&
+            typeof parsed === "object" &&
+            !Array.isArray(parsed)
+          ) {
+            response = parsed as Record<string, unknown>;
+          } else {
+            response = { result: parsed };
+          }
         } catch {
           response = { result: msg.content ?? "" };
         }
         contents.push({
           role: "user",
-          parts: [{
-            functionResponse: {
-              name: functionName,
-              response,
+          parts: [
+            {
+              functionResponse: {
+                name: functionName,
+                response,
+              },
             },
-          }],
+          ],
         });
       } else {
         contents.push({
@@ -164,13 +184,15 @@ export class GeminiAdapter implements LlmProviderPort {
     }
 
     if (request.tools && request.tools.length > 0) {
-      body.tools = [{
-        functionDeclarations: request.tools.map((t) => ({
-          name: t.name,
-          ...(t.description ? { description: t.description } : {}),
-          ...(t.parameters ? { parameters: t.parameters } : {}),
-        })),
-      }];
+      body.tools = [
+        {
+          functionDeclarations: request.tools.map((t) => ({
+            name: t.name,
+            ...(t.description ? { description: t.description } : {}),
+            ...(t.parameters ? { parameters: t.parameters } : {}),
+          })),
+        },
+      ];
     }
 
     const generationConfig: Record<string, unknown> = {};
@@ -206,7 +228,11 @@ export class GeminiAdapter implements LlmProviderPort {
   ): CompletionResponse {
     const candidate = data.candidates?.[0];
     if (!candidate) {
-      throw new ProviderApiError(provider, 200, "Gemini response has no candidates");
+      throw new ProviderApiError(
+        provider,
+        200,
+        "Gemini response has no candidates",
+      );
     }
     const parts = candidate?.content?.parts ?? [];
 
@@ -223,6 +249,9 @@ export class GeminiAdapter implements LlmProviderPort {
             name: part.functionCall.name,
             arguments: JSON.stringify(part.functionCall.args ?? {}),
           },
+          ...(part.thoughtSignature
+            ? { thoughtSignature: part.thoughtSignature }
+            : {}),
         });
       } else if (part.thought) {
         reasoning += part.text ?? "";
