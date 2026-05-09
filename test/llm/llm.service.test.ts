@@ -241,4 +241,108 @@ describe("LlmService", () => {
     expect(capturedRequest!.frequencyPenalty).toBe(0.5);
     expect(capturedRequest!.presencePenalty).toBe(0.3);
   });
+
+  test("passes tools through to adapter", async () => {
+    let capturedRequest: CompletionRequest | null = null;
+    const mockAdapter: LlmProviderPort = {
+      complete: async (req: CompletionRequest) => {
+        capturedRequest = req;
+        return fakeResponse();
+      },
+    };
+
+    const providers = new Map([["openai", mockAdapter]]);
+    const service = new LlmService(providers, makeFakeConfig(), makeFakeLogger());
+
+    const tools = [
+      { name: "get_weather", description: "Get weather", parameters: { type: "object" as const, properties: {} } },
+    ];
+
+    await service.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+      tools,
+    });
+
+    expect(capturedRequest!.tools).toEqual(tools);
+  });
+
+  test("omits tools from request when not provided", async () => {
+    let capturedRequest: CompletionRequest | null = null;
+    const mockAdapter: LlmProviderPort = {
+      complete: async (req: CompletionRequest) => {
+        capturedRequest = req;
+        return fakeResponse();
+      },
+    };
+
+    const providers = new Map([["openai", mockAdapter]]);
+    const service = new LlmService(providers, makeFakeConfig(), makeFakeLogger());
+
+    await service.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(capturedRequest!.tools).toBeUndefined();
+  });
+
+  test("logs tool call count when response has tool calls", async () => {
+    const logs: Array<{ message: string; context: Record<string, unknown> }> = [];
+    const logger: LoggerPort = {
+      debug: () => {},
+      info: (msg: string, ctx: Record<string, unknown>) => { logs.push({ message: msg, context: ctx }); },
+      warn: () => {},
+      error: () => {},
+    };
+
+    const mockAdapter: LlmProviderPort = {
+      complete: async () => fakeResponse({
+        toolCalls: [
+          { id: "call_1", type: "function", function: { name: "fn", arguments: "{}" } },
+          { id: "call_2", type: "function", function: { name: "fn2", arguments: "{}" } },
+        ],
+      }),
+    };
+
+    const providers = new Map([["openai", mockAdapter]]);
+    const service = new LlmService(providers, makeFakeConfig(), logger);
+
+    await service.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.context.toolCallCount).toBe(2);
+  });
+
+  test("does not log toolCallCount when response has no tool calls", async () => {
+    const logs: Array<{ message: string; context: Record<string, unknown> }> = [];
+    const logger: LoggerPort = {
+      debug: () => {},
+      info: (msg: string, ctx: Record<string, unknown>) => { logs.push({ message: msg, context: ctx }); },
+      warn: () => {},
+      error: () => {},
+    };
+
+    const mockAdapter: LlmProviderPort = {
+      complete: async () => fakeResponse(),
+    };
+
+    const providers = new Map([["openai", mockAdapter]]);
+    const service = new LlmService(providers, makeFakeConfig(), logger);
+
+    await service.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.context.toolCallCount).toBeUndefined();
+  });
 });

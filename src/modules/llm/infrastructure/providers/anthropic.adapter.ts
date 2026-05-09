@@ -2,6 +2,7 @@ import type {
   CompletionRequest,
   CompletionResponse,
   TokenUsage,
+  ToolCall,
 } from "../../domain/ports/llm.types";
 import type { LlmProviderPort } from "../../domain/ports/llm-provider.port";
 import {
@@ -13,21 +14,27 @@ import { parseRetryAfterMs, fetchWithTimeout } from "./shared";
 
 const DEFAULT_MAX_TOKENS = 4096;
 
+type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | { type: "thinking"; thinking: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string };
+
 interface AnthropicMessage {
   role: "user" | "assistant";
-  content: string | Array<{ type: string; text?: string; thinking?: string }>;
+  content: string | AnthropicContentBlock[];
 }
 
 interface AnthropicResponse {
   id: string;
   type: string;
   role: string;
-  content: Array<{
-    type: "text" | "thinking";
-    text?: string;
-    thinking?: string;
-  }>;
-  stop_reason: "end_turn" | "max_tokens" | "stop_sequence" | null;
+  content: Array<
+    | { type: "text"; text?: string }
+    | { type: "thinking"; thinking?: string }
+    | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  >;
+  stop_reason: "end_turn" | "max_tokens" | "stop_sequence" | "tool_use" | null;
   stop_sequence: string | null;
   usage: {
     input_tokens: number;
@@ -76,17 +83,12 @@ export class AnthropicAdapter implements LlmProviderPort {
 
     const systemMessages = request.messages.filter((m) => m.role === "system");
     if (systemMessages.length > 0) {
-      body.system = systemMessages.map((m) => m.content).join("\n");
+      body.system = systemMessages.map((m) => m.content ?? "").join("\n");
     }
 
-    const nonSystemMessages: AnthropicMessage[] = request.messages
-      .filter((m) => m.role !== "system")
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
-
-    body.messages = nonSystemMessages;
+    const nonSystemMessages = request.messages.filter((m) => m.role !== "system");
+    const anthropicMessages = this.buildAnthropicMessages(nonSystemMessages);
+    body.messages = anthropicMessages;
 
     body.max_tokens = request.maxTokens ?? DEFAULT_MAX_TOKENS;
 
@@ -107,6 +109,14 @@ export class AnthropicAdapter implements LlmProviderPort {
       body.stop_sequences = request.stop;
     }
 
+    if (request.tools && request.tools.length > 0) {
+      body.tools = request.tools.map((t) => ({
+        name: t.name,
+        ...(t.description ? { description: t.description } : {}),
+        ...(t.parameters ? { input_schema: t.parameters } : {}),
+      }));
+    }
+
     if (request.providerOptions) {
       if (request.providerOptions["thinking"] !== undefined) {
         body.thinking = request.providerOptions["thinking"];
@@ -119,18 +129,90 @@ export class AnthropicAdapter implements LlmProviderPort {
     return body;
   }
 
+  private buildAnthropicMessages(
+    messages: CompletionRequest["messages"],
+  ): AnthropicMessage[] {
+    const result: AnthropicMessage[] = [];
+
+    for (const msg of messages) {
+      if (msg.role === "assistant") {
+        const content: AnthropicContentBlock[] = [];
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          for (const tc of msg.toolCalls) {
+            let input: Record<string, unknown>;
+            try {
+              input = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+            } catch {
+              throw new ProviderApiError(
+                "anthropic",
+                0,
+                `Malformed tool call arguments for ${tc.function.name}: invalid JSON`,
+              );
+            }
+            content.push({
+              type: "tool_use",
+              id: tc.id,
+              name: tc.function.name,
+              input,
+            });
+          }
+        }
+        if (msg.content) {
+          content.push({ type: "text", text: msg.content });
+        }
+        if (content.length === 0) {
+          content.push({ type: "text", text: "" });
+        }
+        result.push({ role: "assistant", content });
+      } else if (msg.role === "tool") {
+        if (!msg.toolCallId) {
+          throw new ProviderApiError(
+            "anthropic",
+            0,
+            "Tool result message missing required toolCallId",
+          );
+        }
+        const toolResult: AnthropicContentBlock = {
+          type: "tool_result",
+          tool_use_id: msg.toolCallId,
+          content: msg.content ?? "",
+        };
+        const prev = result[result.length - 1];
+        if (prev && prev.role === "user" && Array.isArray(prev.content)) {
+          prev.content.push(toolResult);
+        } else {
+          result.push({ role: "user", content: [toolResult] });
+        }
+      } else {
+        result.push({ role: msg.role as "user", content: msg.content ?? "" });
+      }
+    }
+
+    return result;
+  }
+
   private translateResponse(
     data: AnthropicResponse,
     provider: string,
   ): CompletionResponse {
     let content = "";
     let reasoning = "";
+    const toolCalls: ToolCall[] = [];
 
     for (const block of data.content) {
       if (block.type === "text") {
         content += block.text ?? "";
       } else if (block.type === "thinking") {
         reasoning += block.thinking ?? "";
+      } else if (block.type === "tool_use") {
+        toolCalls.push({
+          id: block.id,
+          type: "function",
+          function: {
+            name: block.name,
+            arguments: JSON.stringify(block.input),
+          },
+        });
       }
     }
 
@@ -144,6 +226,9 @@ export class AnthropicAdapter implements LlmProviderPort {
         break;
       case "stop_sequence":
         stopReason = "stop";
+        break;
+      case "tool_use":
+        stopReason = "tool_calls";
         break;
     }
 
@@ -161,6 +246,7 @@ export class AnthropicAdapter implements LlmProviderPort {
       usage,
       model: data.model,
       provider,
+      ...(toolCalls.length > 0 ? { toolCalls } : {}),
     };
   }
 

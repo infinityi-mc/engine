@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Review unstaged Bun+TS HTTP API diffs. Hexagonal + CQRS + EDA. 3-lens parallel review → consolidated report.
+description: Review working-tree changes (modified + new files) in Bun+TS HTTP API. Hexagonal + CQRS + EDA. 3-lens parallel review → consolidated report.
 ---
 
 
@@ -20,18 +20,22 @@ description: Review unstaged Bun+TS HTTP API diffs. Hexagonal + CQRS + EDA. 3-le
 - CQRS: commands mutate (return void/Result<void>), queries read (never mutate).
 - Events: domain raises, infrastructure subscribes.
 
-## Step 1: Capture Diff
+## Step 1: Capture Changes
 
 ```bash
+# Modified files (tracked, changed but not yet committed)
 git diff --unified=5
 git diff --cached --unified=5  # if unstaged empty
+
+# New/untracked files — diff is empty, read the full file instead
+git ls-files --others --exclude-standard
 ```
 
-Map files to layers by path: `src/domain/`, `src/application/`, `src/infrastructure/`.
+For each untracked file listed, read the full file contents. Map all files to layers by path: `src/domain/`, `src/application/`, `src/infrastructure/`.
 
 ## Step 2: Parallel Review (3 Lenses)
 
-> Small diffs: review directly, no sub-agents.
+> Decide per review whether to run lenses in parallel (sub-agents) or inline based on change size and complexity.
 
 **Lens A — Architecture:**
 - Layer violations (domain→infra imports, handler touching HTTP)

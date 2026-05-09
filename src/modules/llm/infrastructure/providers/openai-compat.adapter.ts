@@ -2,6 +2,7 @@ import type {
   CompletionRequest,
   CompletionResponse,
   TokenUsage,
+  ToolCall,
 } from "../../domain/ports/llm.types";
 import type { LlmProviderPort } from "../../domain/ports/llm-provider.port";
 import {
@@ -11,15 +12,28 @@ import {
 } from "../../domain/errors/llm.errors";
 import { parseRetryAfterMs, fetchWithTimeout } from "./shared";
 
+interface OpenAIToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
 interface OpenAIChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_calls?: OpenAIToolCall[];
+  tool_call_id?: string;
 }
 
 interface OpenAIChatCompletionsResponse {
   id: string;
   choices: Array<{
-    message: { role: string; content: string | null; reasoning?: string | null };
+    message: {
+      role: string;
+      content: string | null;
+      reasoning?: string | null;
+      tool_calls?: OpenAIToolCall[];
+    };
     finish_reason: string | null;
   }>;
   usage: {
@@ -68,15 +82,36 @@ export class OpenAICompatAdapter implements LlmProviderPort {
   }
 
   private buildRequestBody(request: CompletionRequest): Record<string, unknown> {
-    const messages: OpenAIChatMessage[] = request.messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const messages: OpenAIChatMessage[] = request.messages.map((m) => {
+      const msg: OpenAIChatMessage = { role: m.role, content: m.content };
+      if (m.toolCalls && m.toolCalls.length > 0) {
+        msg.tool_calls = m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: tc.type,
+          function: { name: tc.function.name, arguments: tc.function.arguments },
+        }));
+      }
+      if (m.toolCallId) {
+        msg.tool_call_id = m.toolCallId;
+      }
+      return msg;
+    });
 
     const body: Record<string, unknown> = {
       model: request.model,
       messages,
     };
+
+    if (request.tools && request.tools.length > 0) {
+      body.tools = request.tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          ...(t.description ? { description: t.description } : {}),
+          ...(t.parameters ? { parameters: t.parameters } : {}),
+        },
+      }));
+    }
 
     if (request.maxTokens !== undefined) {
       body.max_tokens = request.maxTokens;
@@ -136,10 +171,21 @@ export class OpenAICompatAdapter implements LlmProviderPort {
       case "length":
         stopReason = "length";
         break;
+      case "tool_calls":
+        stopReason = "tool_calls";
+        break;
       case "content_filter":
         stopReason = "error";
         break;
     }
+
+    const toolCalls: ToolCall[] | undefined = choice.message.tool_calls?.map(
+      (tc) => ({
+        id: tc.id,
+        type: tc.type,
+        function: { name: tc.function.name, arguments: tc.function.arguments },
+      }),
+    );
 
     return {
       content: choice.message.content ?? "",
@@ -148,6 +194,7 @@ export class OpenAICompatAdapter implements LlmProviderPort {
       usage: tokenUsage,
       model: data.model,
       provider,
+      ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
     };
   }
 

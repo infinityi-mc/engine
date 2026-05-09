@@ -65,6 +65,9 @@ export class LlmService {
     if (request.presencePenalty !== undefined) {
       fullRequest.presencePenalty = request.presencePenalty;
     }
+    if (request.tools !== undefined) {
+      fullRequest.tools = request.tools;
+    }
 
     const startedAt = Date.now();
     const response = await adapter.complete(fullRequest);
@@ -78,6 +81,7 @@ export class LlmService {
       reasoningTokens: response.usage.reasoningTokens,
       totalTokens: response.usage.totalTokens,
       durationMs,
+      ...(response.toolCalls ? { toolCallCount: response.toolCalls.length } : {}),
     });
 
     return response;

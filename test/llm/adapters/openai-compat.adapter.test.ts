@@ -342,4 +342,204 @@ describe("OpenAICompatAdapter", () => {
     expect(capturedBody.frequency_penalty).toBe(0.5);
     expect(capturedBody.presence_penalty).toBe(0.3);
   });
+
+  test("sends tools in request body", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        choices: [{ message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    };
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+      tools: [
+        {
+          name: "get_weather",
+          description: "Get the weather",
+          parameters: { type: "object", properties: { location: { type: "string" } } },
+        },
+      ],
+    });
+
+    const tools = capturedBody.tools as Array<Record<string, unknown>>;
+    expect(tools).toHaveLength(1);
+    expect(tools[0]!.type).toBe("function");
+    expect((tools[0]!.function as Record<string, unknown>).name).toBe("get_weather");
+    expect((tools[0]!.function as Record<string, unknown>).description).toBe("Get the weather");
+    expect((tools[0]!.function as Record<string, unknown>).parameters).toEqual({
+      type: "object",
+      properties: { location: { type: "string" } },
+    });
+  });
+
+  test("omits tools field when not provided", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        choices: [{ message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    };
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(capturedBody.tools).toBeUndefined();
+  });
+
+  test("omits description and parameters from tool when not provided", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        choices: [{ message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    };
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+      tools: [{ name: "bare_tool" }],
+    });
+
+    const tools = capturedBody.tools as Array<Record<string, unknown>>;
+    const fn = tools[0]!.function as Record<string, unknown>;
+    expect(fn.name).toBe("bare_tool");
+    expect(fn.description).toBeUndefined();
+    expect(fn.parameters).toBeUndefined();
+  });
+
+  test("maps tool_calls from response", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      id: "chatcmpl-123",
+      model: "gpt-4o",
+      choices: [{
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id: "call_abc", type: "function", function: { name: "get_weather", arguments: '{"location":"NYC"}' } },
+          ],
+        },
+        finish_reason: "tool_calls",
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    });
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    const response = await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "What is the weather?" }],
+    });
+
+    expect(response.content).toBe("");
+    expect(response.stopReason).toBe("tool_calls");
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls![0]!.id).toBe("call_abc");
+    expect(response.toolCalls![0]!.type).toBe("function");
+    expect(response.toolCalls![0]!.function.name).toBe("get_weather");
+    expect(response.toolCalls![0]!.function.arguments).toBe('{"location":"NYC"}');
+  });
+
+  test("maps tool_calls finish reason", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      model: "gpt-4o",
+      choices: [{
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call_1", type: "function", function: { name: "fn", arguments: "{}" } }],
+        },
+        finish_reason: "tool_calls",
+      }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    });
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    const response = await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.stopReason).toBe("tool_calls");
+  });
+
+  test("sends assistant message with tool_calls in request body", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        choices: [{ message: { role: "assistant", content: "Done" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    };
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [
+        { role: "user", content: "What is the weather?" },
+        {
+          role: "assistant",
+          content: null,
+          toolCalls: [{ id: "call_abc", type: "function", function: { name: "get_weather", arguments: '{"location":"NYC"}' } }],
+        },
+        { role: "tool", content: '{"temp":72}', toolCallId: "call_abc" },
+      ],
+    });
+
+    const messages = capturedBody.messages as Array<Record<string, unknown>>;
+    expect(messages).toHaveLength(3);
+
+    expect(messages[1]!.role).toBe("assistant");
+    expect(messages[1]!.content).toBeNull();
+    expect(messages[1]!.tool_calls).toEqual([
+      { id: "call_abc", type: "function", function: { name: "get_weather", arguments: '{"location":"NYC"}' } },
+    ]);
+
+    expect(messages[2]!.role).toBe("tool");
+    expect(messages[2]!.content).toBe('{"temp":72}');
+    expect(messages[2]!.tool_call_id).toBe("call_abc");
+  });
 });

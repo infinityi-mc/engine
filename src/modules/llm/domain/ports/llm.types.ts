@@ -1,6 +1,21 @@
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+}
+
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  toolCalls?: ToolCall[];
+  toolCallId?: string;
+  toolName?: string;
 }
 
 export interface CompletionRequest {
@@ -14,6 +29,7 @@ export interface CompletionRequest {
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  tools?: ToolDefinition[];
   providerOptions?: Record<string, unknown>;
 }
 
@@ -24,7 +40,7 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
-export type StopReason = "stop" | "length" | "error" | "unknown";
+export type StopReason = "stop" | "length" | "tool_calls" | "error" | "unknown";
 
 export interface CompletionResponse {
   content: string;
@@ -33,4 +49,5 @@ export interface CompletionResponse {
   usage: TokenUsage;
   model: string;
   provider: string;
+  toolCalls?: ToolCall[];
 }

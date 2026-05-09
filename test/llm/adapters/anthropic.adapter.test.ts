@@ -112,9 +112,9 @@ describe("AnthropicAdapter", () => {
       ],
     });
 
-    const messages = capturedBody.messages as Array<{ role: string; content: string }>;
+    const messages = capturedBody.messages as Array<{ role: string; content: unknown }>;
     expect(messages[0]).toEqual({ role: "user", content: "Hello" });
-    expect(messages[1]).toEqual({ role: "assistant", content: "Hi" });
+    expect(messages[1]).toEqual({ role: "assistant", content: [{ type: "text", text: "Hi" }] });
     expect(messages[2]).toEqual({ role: "user", content: "How are you?" });
   });
 
@@ -379,5 +379,260 @@ describe("AnthropicAdapter", () => {
     expect(capturedBody.top_p).toBe(0.9);
     expect(capturedBody.frequency_penalty).toBe(0.5);
     expect(capturedBody.presence_penalty).toBe(0.3);
+  });
+
+  test("sends tools in request body with input_schema", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        content: [{ type: "text", text: "Hi" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        model: "claude-sonnet-4.5",
+      });
+    };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "Hi" }],
+      tools: [{
+        name: "get_weather",
+        description: "Get the weather",
+        parameters: { type: "object", properties: { location: { type: "string" } } },
+      }],
+    });
+
+    const tools = capturedBody.tools as Array<Record<string, unknown>>;
+    expect(tools).toHaveLength(1);
+    expect(tools[0]!.name).toBe("get_weather");
+    expect(tools[0]!.description).toBe("Get the weather");
+    expect(tools[0]!.input_schema).toEqual({
+      type: "object",
+      properties: { location: { type: "string" } },
+    });
+  });
+
+  test("omits tools field when not provided", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        content: [{ type: "text", text: "Hi" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        model: "claude-sonnet-4.5",
+      });
+    };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(capturedBody.tools).toBeUndefined();
+  });
+
+  test("maps tool_use content blocks from response", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      id: "msg_123",
+      type: "message",
+      role: "assistant",
+      content: [
+        { type: "tool_use", id: "toolu_abc", name: "get_weather", input: { location: "NYC" } },
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 10, output_tokens: 15 },
+      model: "claude-sonnet-4.5",
+    });
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "What is the weather?" }],
+    });
+
+    expect(response.content).toBe("");
+    expect(response.stopReason).toBe("tool_calls");
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls![0]!.id).toBe("toolu_abc");
+    expect(response.toolCalls![0]!.type).toBe("function");
+    expect(response.toolCalls![0]!.function.name).toBe("get_weather");
+    expect(response.toolCalls![0]!.function.arguments).toBe('{"location":"NYC"}');
+  });
+
+  test("maps tool_use stop reason", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      content: [{ type: "tool_use", id: "toolu_abc", name: "fn", input: {} }],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 1, output_tokens: 1 },
+      model: "claude-sonnet-4.5",
+    });
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.stopReason).toBe("tool_calls");
+  });
+
+  test("sends tool result messages wrapped in user role", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        content: [{ type: "text", text: "It is 72°F." }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        model: "claude-sonnet-4.5",
+      });
+    };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [
+        { role: "user", content: "What is the weather?" },
+        {
+          role: "assistant",
+          content: null,
+          toolCalls: [{ id: "toolu_abc", type: "function", function: { name: "get_weather", arguments: '{"location":"NYC"}' } }],
+        },
+        { role: "tool", content: '{"temp":72}', toolCallId: "toolu_abc" },
+      ],
+    });
+
+    const messages = capturedBody.messages as Array<Record<string, unknown>>;
+    expect(messages).toHaveLength(3);
+
+    expect(messages[0]!.role).toBe("user");
+    expect(messages[0]!.content).toBe("What is the weather?");
+
+    expect(messages[1]!.role).toBe("assistant");
+    const assistantContent = messages[1]!.content as Array<Record<string, unknown>>;
+    expect(assistantContent).toHaveLength(1);
+    expect(assistantContent[0]!.type).toBe("tool_use");
+    expect(assistantContent[0]!.id).toBe("toolu_abc");
+    expect(assistantContent[0]!.name).toBe("get_weather");
+    expect(assistantContent[0]!.input).toEqual({ location: "NYC" });
+
+    expect(messages[2]!.role).toBe("user");
+    const toolResultContent = messages[2]!.content as Array<Record<string, unknown>>;
+    expect(toolResultContent).toHaveLength(1);
+    expect(toolResultContent[0]!.type).toBe("tool_result");
+    expect(toolResultContent[0]!.tool_use_id).toBe("toolu_abc");
+    expect(toolResultContent[0]!.content).toBe('{"temp":72}');
+  });
+
+  test("groups multiple tool results into one user message", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        content: [{ type: "text", text: "Done" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        model: "claude-sonnet-4.5",
+      });
+    };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [
+        { role: "user", content: "Check both" },
+        {
+          role: "assistant",
+          content: null,
+          toolCalls: [
+            { id: "toolu_a", type: "function", function: { name: "get_weather", arguments: '{"location":"NYC"}' } },
+            { id: "toolu_b", type: "function", function: { name: "get_weather", arguments: '{"location":"LA"}' } },
+          ],
+        },
+        { role: "tool", content: '{"temp":72}', toolCallId: "toolu_a" },
+        { role: "tool", content: '{"temp":85}', toolCallId: "toolu_b" },
+      ],
+    });
+
+    const messages = capturedBody.messages as Array<Record<string, unknown>>;
+    // 3 messages: user, assistant, user (with 2 tool results)
+    expect(messages).toHaveLength(3);
+
+    const toolResultMsg = messages[2]!;
+    expect(toolResultMsg.role).toBe("user");
+    const toolResults = toolResultMsg.content as Array<Record<string, unknown>>;
+    expect(toolResults).toHaveLength(2);
+    expect(toolResults[0]!.tool_use_id).toBe("toolu_a");
+    expect(toolResults[1]!.tool_use_id).toBe("toolu_b");
+  });
+
+  test("maps text and tool_use content blocks together", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      id: "msg_123",
+      type: "message",
+      role: "assistant",
+      content: [
+        { type: "text", text: "Let me check." },
+        { type: "tool_use", id: "toolu_abc", name: "get_weather", input: { location: "NYC" } },
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 10, output_tokens: 15 },
+      model: "claude-sonnet-4.5",
+    });
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "What is the weather?" }],
+    });
+
+    expect(response.content).toBe("Let me check.");
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls![0]!.function.name).toBe("get_weather");
+  });
+
+  test("throws ProviderApiError on malformed tool call arguments", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      content: [{ type: "text", text: "Hi" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+      model: "claude-sonnet-4.5",
+    });
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await expect(
+      adapter.complete({
+        provider: "anthropic",
+        model: "claude-sonnet-4.5",
+        messages: [
+          { role: "user", content: "Hi" },
+          {
+            role: "assistant",
+            content: null,
+            toolCalls: [{ id: "toolu_abc", type: "function", function: { name: "fn", arguments: "not-json" } }],
+          },
+          { role: "tool", content: '{"ok":true}', toolCallId: "toolu_abc" },
+        ],
+      }),
+    ).rejects.toThrow(ProviderApiError);
   });
 });

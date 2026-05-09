@@ -11,11 +11,9 @@ This is the **low-level LLM calling layer**. For high-level agent orchestration 
 
 ## Phase 1 Scope
 
-The module covers non-streaming completions only. The following are intentionally out of scope and will not be added without an explicit plan:
+The module covers non-streaming completions with tool calling. The following are intentionally out of scope and will not be added without an explicit plan:
 
 - Streaming responses
-- Agent loops (multi-step reasoning with tool calls)
-- Tool/function definitions
 - Session persistence / conversation history
 - Retry logic with exponential backoff
 - Token counting API
@@ -72,9 +70,10 @@ Each adapter translates the unified request to the provider's native format, mak
 {
   provider: string;          // e.g. "anthropic", "openai", "google", "openrouter"
   model: string;            // provider-native model name
-  messages: ChatMessage[];   // OpenAI format: { role, content }
+  messages: ChatMessage[];   // OpenAI format: { role, content, toolCalls?, toolCallId? }
   maxTokens?: number;
   temperature?: number;
+  tools?: ToolDefinition[];  // tool/function definitions for tool calling
   providerOptions?: Record<string, unknown>; // escape hatch for provider-specific features
 }
 ```
@@ -87,7 +86,7 @@ Each adapter translates the unified request to the provider's native format, mak
 {
   content: string;        // generated text
   reasoning: string;      // thinking text (empty if not available)
-  stopReason: "stop" | "length" | "error" | "unknown";
+  stopReason: "stop" | "length" | "tool_calls" | "error" | "unknown";
   usage: {
     inputTokens: number;
     outputTokens: number;
@@ -96,6 +95,7 @@ Each adapter translates the unified request to the provider's native format, mak
   };
   model: string;
   provider: string;
+  toolCalls?: ToolCall[]; // present when stopReason is "tool_calls"
 }
 ```
 
@@ -109,6 +109,65 @@ Provider-specific features are passed through without transformation via the `pr
 | Anthropic | `outputConfig` | `{ type: "text" }` |
 | OpenAI | `reasoning` | `{ effort: "high" \| "medium" \| "low" }` |
 | Google Gemini | `thinkingConfig` | `{ thinkingBudget: number }` |
+
+## Tool Calling
+
+Tool calling is supported across all three provider families. The unified types use OpenAI's format as the canonical shape, and each adapter translates to/from the provider's native format.
+
+### Unified Tool Types
+
+```typescript
+interface ToolDefinition {
+  name: string;
+  description?: string;
+  parameters?: Record<string, unknown>; // JSON Schema object
+}
+
+interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string }; // arguments is JSON string
+}
+```
+
+### Message Flow
+
+1. **Request**: Pass `tools` array in `CompletionRequest`. The adapter translates to the provider's native format.
+2. **Response**: When the model wants to call tools, `stopReason` is `"tool_calls"` and `toolCalls` array is populated in `CompletionResponse`.
+3. **Tool execution**: The caller executes the tools and creates `ChatMessage` entries with `role: "tool"`, `toolCallId`, and the result in `content`.
+4. **Follow-up**: Pass the full conversation (including tool results) back to `complete()`.
+
+### Provider Tool Calling Translation
+
+#### OpenAI-Compatible
+
+```
+Request tools → tools: [{ type: "function", function: { name, description, parameters } }]
+Request tool messages → { role: "tool", tool_call_id, content }
+Request assistant with tool_calls → { role: "assistant", content: null, tool_calls: [...] }
+Response tool_calls → ToolCall[]
+Response finish_reason: "tool_calls" → stopReason: "tool_calls"
+```
+
+#### Anthropic
+
+```
+Request tools → tools: [{ name, description, input_schema }]
+Request tool results → wrapped in user message: { role: "user", content: [{ type: "tool_result", tool_use_id, content }] }
+Request assistant with tool_calls → { role: "assistant", content: [{ type: "tool_use", id, name, input }] }
+Response tool_use content blocks → ToolCall[]
+Response stop_reason: "tool_use" → stopReason: "tool_calls"
+```
+
+#### Google Gemini
+
+```
+Request tools → tools: [{ functionDeclarations: [{ name, description, parameters }] }]
+Request tool results → { role: "user", parts: [{ functionResponse: { name, response } }] }
+Request assistant with tool_calls → { role: "model", parts: [{ functionCall: { name, args } }] }
+Response functionCall parts → ToolCall[] (IDs generated via crypto.randomUUID())
+Response finishReason: "STOP" with functionCall parts → stopReason: "tool_calls"
+```
 
 ## Provider Request/Response Translation
 
@@ -238,5 +297,9 @@ When reviewing this module, focus on:
 - `LlmService` resolves provider/model from request or config defaults
 - No thinking abstraction — provider-native config only via `providerOptions`
 - Logs do not include message content or reasoning text
+- Tool definitions correctly translated per provider format
+- Tool calls extracted from response with correct IDs (generated for Gemini)
+- Tool result messages correctly wrapped per provider format (Anthropic: user message with tool_result blocks)
+- `stopReason: "tool_calls"` correctly mapped from provider-native stop reasons
 
-Do not flag the absence of streaming, tool calls, session persistence, or retry logic. Those are out of scope for Phase 1.
+Do not flag the absence of streaming, session persistence, or retry logic. Those are out of scope for Phase 1.

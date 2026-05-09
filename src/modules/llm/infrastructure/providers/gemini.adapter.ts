@@ -2,6 +2,7 @@ import type {
   CompletionRequest,
   CompletionResponse,
   TokenUsage,
+  ToolCall,
 } from "../../domain/ports/llm.types";
 import type { LlmProviderPort } from "../../domain/ports/llm-provider.port";
 import {
@@ -11,9 +12,22 @@ import {
 } from "../../domain/errors/llm.errors";
 import { parseRetryAfterMs, fetchWithTimeout } from "./shared";
 
+interface GeminiFunctionCall {
+  id?: string;
+  name: string;
+  args?: Record<string, unknown>;
+}
+
+interface GeminiFunctionResponse {
+  name: string;
+  response: Record<string, unknown>;
+}
+
 interface GeminiPart {
   text?: string;
   thought?: boolean;
+  functionCall?: GeminiFunctionCall;
+  functionResponse?: GeminiFunctionResponse;
 }
 
 interface GeminiContent {
@@ -77,7 +91,7 @@ export class GeminiAdapter implements LlmProviderPort {
     const systemMessages = request.messages.filter((m) => m.role === "system");
     if (systemMessages.length > 0) {
       body.systemInstruction = {
-        parts: systemMessages.map((m) => ({ text: m.content })),
+        parts: systemMessages.map((m) => ({ text: m.content ?? "" })),
       };
     }
 
@@ -87,15 +101,76 @@ export class GeminiAdapter implements LlmProviderPort {
 
     const contents: GeminiContent[] = [];
     for (const msg of nonSystemMessages) {
-      const role = msg.role === "assistant" ? "model" : "user";
-      contents.push({
-        role,
-        parts: [{ text: msg.content }],
-      });
+      if (msg.role === "assistant") {
+        const parts: GeminiPart[] = [];
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          for (const tc of msg.toolCalls) {
+            let args: Record<string, unknown>;
+            try {
+              args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+            } catch {
+              throw new ProviderApiError(
+                request.provider,
+                0,
+                `Malformed tool call arguments for ${tc.function.name}: invalid JSON`,
+              );
+            }
+            parts.push({
+              functionCall: {
+                name: tc.function.name,
+                args,
+              },
+            });
+          }
+        }
+        if (msg.content) {
+          parts.push({ text: msg.content });
+        }
+        contents.push({ role: "model", parts });
+      } else if (msg.role === "tool") {
+        const functionName = msg.toolName ?? msg.toolCallId;
+        if (!functionName) {
+          throw new ProviderApiError(
+            request.provider,
+            0,
+            "Tool result message missing required toolName or toolCallId",
+          );
+        }
+        let response: Record<string, unknown>;
+        try {
+          response = JSON.parse(msg.content ?? "{}") as Record<string, unknown>;
+        } catch {
+          response = { result: msg.content ?? "" };
+        }
+        contents.push({
+          role: "user",
+          parts: [{
+            functionResponse: {
+              name: functionName,
+              response,
+            },
+          }],
+        });
+      } else {
+        contents.push({
+          role: "user",
+          parts: [{ text: msg.content ?? "" }],
+        });
+      }
     }
 
     if (contents.length > 0) {
       body.contents = contents;
+    }
+
+    if (request.tools && request.tools.length > 0) {
+      body.tools = [{
+        functionDeclarations: request.tools.map((t) => ({
+          name: t.name,
+          ...(t.description ? { description: t.description } : {}),
+          ...(t.parameters ? { parameters: t.parameters } : {}),
+        })),
+      }];
     }
 
     const generationConfig: Record<string, unknown> = {};
@@ -137,9 +212,19 @@ export class GeminiAdapter implements LlmProviderPort {
 
     let content = "";
     let reasoning = "";
+    const toolCalls: ToolCall[] = [];
 
     for (const part of parts) {
-      if (part.thought) {
+      if (part.functionCall) {
+        toolCalls.push({
+          id: part.functionCall.id ?? crypto.randomUUID(),
+          type: "function",
+          function: {
+            name: part.functionCall.name,
+            arguments: JSON.stringify(part.functionCall.args ?? {}),
+          },
+        });
+      } else if (part.thought) {
         reasoning += part.text ?? "";
       } else {
         content += part.text ?? "";
@@ -149,7 +234,7 @@ export class GeminiAdapter implements LlmProviderPort {
     let stopReason: CompletionResponse["stopReason"] = "unknown";
     switch (candidate?.finishReason) {
       case "STOP":
-        stopReason = "stop";
+        stopReason = toolCalls.length > 0 ? "tool_calls" : "stop";
         break;
       case "MAX_TOKENS":
         stopReason = "length";
@@ -177,6 +262,7 @@ export class GeminiAdapter implements LlmProviderPort {
       usage,
       model: data.modelVersion ?? requestedModel,
       provider,
+      ...(toolCalls.length > 0 ? { toolCalls } : {}),
     };
   }
 

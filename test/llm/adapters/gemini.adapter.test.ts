@@ -379,4 +379,311 @@ describe("GeminiAdapter", () => {
     const genConfig = capturedBody.generationConfig as Record<string, unknown>;
     expect(genConfig.topP).toBe(0.8);
   });
+
+  test("sends tools as functionDeclarations in request body", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        candidates: [{ content: { parts: [{ text: "Hi" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      });
+    };
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+      tools: [{
+        name: "get_weather",
+        description: "Get the weather",
+        parameters: { type: "object", properties: { location: { type: "string" } } },
+      }],
+    });
+
+    const tools = capturedBody.tools as Array<Record<string, unknown>>;
+    expect(tools).toHaveLength(1);
+    const decls = tools[0]!.functionDeclarations as Array<Record<string, unknown>>;
+    expect(decls).toHaveLength(1);
+    expect(decls[0]!.name).toBe("get_weather");
+    expect(decls[0]!.description).toBe("Get the weather");
+    expect(decls[0]!.parameters).toEqual({
+      type: "object",
+      properties: { location: { type: "string" } },
+    });
+  });
+
+  test("omits tools field when not provided", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        candidates: [{ content: { parts: [{ text: "Hi" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      });
+    };
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(capturedBody.tools).toBeUndefined();
+  });
+
+  test("maps functionCall parts from response", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: {
+          parts: [{ functionCall: { name: "get_weather", args: { location: "NYC" } } }],
+        },
+        finishReason: "STOP",
+      }],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "What is the weather?" }],
+    });
+
+    expect(response.content).toBe("");
+    expect(response.stopReason).toBe("tool_calls");
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls![0]!.id).toBeTruthy();
+    expect(typeof response.toolCalls![0]!.id).toBe("string");
+    expect(response.toolCalls![0]!.type).toBe("function");
+    expect(response.toolCalls![0]!.function.name).toBe("get_weather");
+    expect(response.toolCalls![0]!.function.arguments).toBe('{"location":"NYC"}');
+  });
+
+  test("generates unique IDs for each function call", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: {
+          parts: [
+            { functionCall: { name: "fn_a", args: {} } },
+            { functionCall: { name: "fn_b", args: {} } },
+          ],
+        },
+        finishReason: "STOP",
+      }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.toolCalls).toHaveLength(2);
+    expect(response.toolCalls![0]!.id).not.toBe(response.toolCalls![1]!.id);
+    expect(response.toolCalls![0]!.function.name).toBe("fn_a");
+    expect(response.toolCalls![1]!.function.name).toBe("fn_b");
+  });
+
+  test("maps functionResponse parts for tool messages", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        candidates: [{ content: { parts: [{ text: "It is 72°F." }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      });
+    };
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [
+        { role: "user", content: "What is the weather?" },
+        {
+          role: "assistant",
+          content: null,
+          toolCalls: [{ id: "call_abc", type: "function", function: { name: "get_weather", arguments: '{"location":"NYC"}' } }],
+        },
+        { role: "tool", content: '{"temp":72}', toolCallId: "call_abc", toolName: "get_weather" },
+      ],
+    });
+
+    const contents = capturedBody.contents as Array<Record<string, unknown>>;
+    expect(contents).toHaveLength(3);
+
+    expect(contents[0]!.role).toBe("user");
+
+    expect(contents[1]!.role).toBe("model");
+    const modelParts = contents[1]!.parts as Array<Record<string, unknown>>;
+    expect(modelParts[0]!.functionCall).toEqual({ name: "get_weather", args: { location: "NYC" } });
+
+    expect(contents[2]!.role).toBe("user");
+    const toolParts = contents[2]!.parts as Array<Record<string, unknown>>;
+    expect(toolParts[0]!.functionResponse).toEqual({ name: "get_weather", response: { temp: 72 } });
+  });
+
+  test("maps functionCall to tool_calls stop reason", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: { parts: [{ functionCall: { name: "fn", args: {} } }] },
+        finishReason: "STOP",
+      }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.stopReason).toBe("tool_calls");
+  });
+
+  test("maps text and functionCall parts together", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: {
+          parts: [
+            { text: "Let me check." },
+            { functionCall: { name: "get_weather", args: { location: "NYC" } } },
+          ],
+        },
+        finishReason: "STOP",
+      }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "What is the weather?" }],
+    });
+
+    expect(response.content).toBe("Let me check.");
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls![0]!.function.name).toBe("get_weather");
+  });
+
+  test("uses API-returned functionCall ID when present", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: {
+          parts: [{ functionCall: { id: "gemini-call-123", name: "get_weather", args: { location: "NYC" } } }],
+        },
+        finishReason: "STOP",
+      }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls![0]!.id).toBe("gemini-call-123");
+  });
+
+  test("falls back to generated UUID when functionCall ID is absent", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: {
+          parts: [{ functionCall: { name: "fn", args: {} } }],
+        },
+        finishReason: "STOP",
+      }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls![0]!.id).toBeTruthy();
+    expect(typeof response.toolCalls![0]!.id).toBe("string");
+    expect(response.toolCalls![0]!.id.length).toBeGreaterThan(0);
+  });
+
+  test("throws ProviderApiError on malformed tool call arguments", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{ content: { parts: [{ text: "Hi" }] }, finishReason: "STOP" }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await expect(
+      adapter.complete({
+        provider: "google",
+        model: "gemini-2.0-flash",
+        messages: [
+          { role: "user", content: "Hi" },
+          {
+            role: "assistant",
+            content: null,
+            toolCalls: [{ id: "call_1", type: "function", function: { name: "fn", arguments: "not-json" } }],
+          },
+          { role: "tool", content: '{"ok":true}', toolCallId: "call_1", toolName: "fn" },
+        ],
+      }),
+    ).rejects.toThrow(ProviderApiError);
+  });
+
+  test("wraps non-JSON tool result content as { result: string }", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        candidates: [{ content: { parts: [{ text: "Done" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      });
+    };
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [
+        { role: "user", content: "Hi" },
+        {
+          role: "assistant",
+          content: null,
+          toolCalls: [{ id: "call_1", type: "function", function: { name: "fn", arguments: '{}' } }],
+        },
+        { role: "tool", content: 'plain text result', toolCallId: "call_1", toolName: "fn" },
+      ],
+    });
+
+    const contents = capturedBody.contents as Array<Record<string, unknown>>;
+    const toolParts = contents[2]!.parts as Array<Record<string, unknown>>;
+    expect(toolParts[0]!.functionResponse).toEqual({
+      name: "fn",
+      response: { result: "plain text result" },
+    });
+  });
 });
