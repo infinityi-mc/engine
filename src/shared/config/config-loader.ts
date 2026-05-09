@@ -11,6 +11,27 @@ export interface ConfigLoaderResult {
   rawJson: unknown;
 }
 
+const DEFAULT_CONFIG: AppConfig = {
+  llm: {
+    defaultProvider: "none",
+    defaultModel: "none",
+    providers: {
+      anthropic: {
+        apiKey: "ANTHROPIC_API_KEY",
+        baseUrl: "https://api.anthropic.com",
+      },
+      openai: {
+        apiKey: "OPENAI_API_KEY",
+        baseUrl: "https://api.openai.com",
+      },
+      google: {
+        apiKey: "GOOGLE_API_KEY",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      },
+    },
+  },
+};
+
 export function loadConfig(input: ConfigLoaderInput): ConfigLoaderResult {
   let content: string;
   try {
@@ -18,9 +39,7 @@ export function loadConfig(input: ConfigLoaderInput): ConfigLoaderResult {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
-      throw new Error(
-        `Config file not found at "${input.configPath}". Create it or check the path.`,
-      );
+      return resolveDefaults();
     }
     throw new Error(
       `Failed to read config at "${input.configPath}": ${error instanceof Error ? error.message : String(error)}`,
@@ -69,5 +88,29 @@ function resolveEnvVars(config: AppConfig): AppConfig {
       ...config.llm,
       providers: resolvedProviders,
     },
+  };
+}
+
+function resolveDefaults(): ConfigLoaderResult {
+  const resolvedProviders: AppConfig["llm"]["providers"] = {};
+
+  for (const [name, provider] of Object.entries(DEFAULT_CONFIG.llm.providers)) {
+    const envValue = Bun.env[provider.apiKey];
+    if (envValue) {
+      resolvedProviders[name] = {
+        apiKey: envValue,
+        baseUrl: provider.baseUrl,
+      };
+    }
+  }
+
+  return {
+    config: {
+      llm: {
+        ...DEFAULT_CONFIG.llm,
+        providers: resolvedProviders,
+      },
+    },
+    rawJson: DEFAULT_CONFIG,
   };
 }

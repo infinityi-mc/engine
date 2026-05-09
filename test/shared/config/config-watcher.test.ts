@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -146,6 +147,47 @@ describe("config-watcher", () => {
 
       await new Promise((r) => setTimeout(r, 500));
       expect(callCount).toBe(0);
+    } finally {
+      if (original === undefined) delete Bun.env.TEST_WATCHER_KEY;
+      else Bun.env.TEST_WATCHER_KEY = original;
+    }
+  });
+
+  test("detects config file creation when file did not exist", async () => {
+    const original = Bun.env.TEST_WATCHER_KEY;
+    Bun.env.TEST_WATCHER_KEY = "initial-value";
+    try {
+      const configPath = path.join(directory, "config.json");
+      expect(existsSync(configPath)).toBe(false);
+
+      await new Promise<void>((resolve, reject) => {
+        const watcher = createConfigWatcher({
+          configPath,
+          logger: noopLogger,
+          onReload: (config: AppConfig) => {
+            expect(config.llm.defaultModel).toBe("created-model");
+            watcher.stop();
+            resolve();
+          },
+          onError: (error) => {
+            watcher.stop();
+            reject(error);
+          },
+        });
+
+        setTimeout(async () => {
+          const data = baseConfig() as {
+            llm: { defaultModel: string; providers: unknown };
+          };
+          data.llm.defaultModel = "created-model";
+          await writeFile(configPath, JSON.stringify(data, null, 2), "utf-8");
+        }, 500);
+
+        setTimeout(() => {
+          watcher.stop();
+          reject(new Error("Timeout: file creation not detected"));
+        }, 5000);
+      });
     } finally {
       if (original === undefined) delete Bun.env.TEST_WATCHER_KEY;
       else Bun.env.TEST_WATCHER_KEY = original;

@@ -51,10 +51,48 @@ describe("config-loader", () => {
     }
   });
 
-  test("throws when config file is missing", () => {
-    expect(() =>
-      loadConfig({ configPath: path.join(directory, "nonexistent.json") }),
-    ).toThrow("Config file not found");
+  test("returns default config when file is missing", () => {
+    const { config, rawJson } = loadConfig({
+      configPath: path.join(directory, "nonexistent.json"),
+    });
+
+    expect(config.llm.defaultProvider).toBe("none");
+    expect(config.llm.defaultModel).toBe("none");
+    expect(rawJson).toBeDefined();
+  });
+
+  test("default config includes anthropic, openai, google providers", () => {
+    const { config } = loadConfig({
+      configPath: path.join(directory, "nonexistent.json"),
+    });
+
+    expect(config.llm.providers.anthropic?.baseUrl).toBe("https://api.anthropic.com");
+    expect(config.llm.providers.openai?.baseUrl).toBe("https://api.openai.com");
+    expect(config.llm.providers.google?.baseUrl).toBe(
+      "https://generativelanguage.googleapis.com/v1beta",
+    );
+  });
+
+  test("default config resolves env vars for providers", () => {
+    const originalA = Bun.env.ANTHROPIC_API_KEY;
+    const originalO = Bun.env.OPENAI_API_KEY;
+    Bun.env.ANTHROPIC_API_KEY = "test-anthropic-key";
+    Bun.env.OPENAI_API_KEY = "test-openai-key";
+    delete Bun.env.GOOGLE_API_KEY;
+    try {
+      const { config } = loadConfig({
+        configPath: path.join(directory, "nonexistent.json"),
+      });
+
+      expect(config.llm.providers.anthropic?.apiKey).toBe("test-anthropic-key");
+      expect(config.llm.providers.openai?.apiKey).toBe("test-openai-key");
+      expect(config.llm.providers.google).toBeUndefined();
+    } finally {
+      if (originalA === undefined) delete Bun.env.ANTHROPIC_API_KEY;
+      else Bun.env.ANTHROPIC_API_KEY = originalA;
+      if (originalO === undefined) delete Bun.env.OPENAI_API_KEY;
+      else Bun.env.OPENAI_API_KEY = originalO;
+    }
   });
 
   test("throws on invalid JSON", async () => {
