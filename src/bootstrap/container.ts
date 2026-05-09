@@ -71,6 +71,12 @@ import { AnthropicAdapter } from "../modules/llm/infrastructure/providers/anthro
 import { OpenAICompatAdapter } from "../modules/llm/infrastructure/providers/openai-compat.adapter";
 import { GeminiAdapter } from "../modules/llm/infrastructure/providers/gemini.adapter";
 import { LlmService } from "../modules/llm/application/llm.service";
+import type { AgentService as AgentServiceType } from "../modules/agent/application/agent.service";
+import type { ToolRegistryPort } from "../modules/agent/domain/ports/tool-registry.port";
+import { InMemoryToolRegistry } from "../modules/agent/infrastructure/registry/tool-registry.adapter";
+import { ConfigAgentDefinitionRepository } from "../modules/agent/infrastructure/persistence/agent-definition-repository.adapter";
+import { RunPythonTool } from "../modules/agent/infrastructure/tools/run-python.tool";
+import { AgentService } from "../modules/agent/application/agent.service";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -84,6 +90,8 @@ export interface AppContainer {
   readonly minecraftStdin: MinecraftStdinPort;
   readonly minecraftLog: MinecraftLogPort;
   readonly llmService: LlmServiceType;
+  readonly agentService: AgentServiceType;
+  readonly toolRegistry: ToolRegistryPort;
 }
 
 export function createContainer(): AppContainer {
@@ -218,6 +226,19 @@ export function createContainer(): AppContainer {
 
   const llmService = new LlmService(providers, config, logger);
 
+  // Agent module
+  const toolRegistry = new InMemoryToolRegistry(logger);
+  toolRegistry.register(new RunPythonTool(terminal, logger));
+
+  const agentDefinitions = new ConfigAgentDefinitionRepository(config, logger);
+  const agentService = new AgentService({
+    llmService,
+    toolRegistry,
+    agentDefinitions,
+    config,
+    logger,
+  });
+
   return {
     commandBus,
     queryBus,
@@ -230,5 +251,7 @@ export function createContainer(): AppContainer {
     minecraftStdin,
     minecraftLog,
     llmService,
+    agentService,
+    toolRegistry,
   };
 }
