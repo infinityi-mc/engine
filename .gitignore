@@ -5,13 +5,10 @@ dist/
 !.env.example
 *.log
 .DS_Store
-.agents/skills/code-reviewer/review-findings.md
-.agents/skills/code-reviewer/invalid-findings.md
-.agents/plans
-.agents/reports
+.agents/
+.claude
 data/temp
 config.json
 scratch/
-data/pids
-data/minecraft/
+data/
 docs/
