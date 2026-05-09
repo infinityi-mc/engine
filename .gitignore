@@ -7,3 +7,10 @@ dist/
 .DS_Store
 .agents/skills/code-reviewer/review-findings.md
 .agents/skills/code-reviewer/invalid-findings.md
+.agents/plans
+.agents/reports
+data/temp
+config.json
+scratch/
+data/pids
+data/minecraft/

@@ -1,6 +1,8 @@
 import path from "node:path";
 import { CommandBus } from "../shared/application/command-bus";
 import { QueryBus } from "../shared/application/query-bus";
+import { ConfigAdapter } from "../shared/config/config.adapter";
+import type { ConfigPort } from "../shared/config/config.port";
 import { JwtGuard } from "../shared/http/jwt-guard";
 import { ConsoleLoggerAdapter } from "../shared/observability/console-logger.adapter";
 import type { LoggerPort } from "../shared/observability/logger.port";
@@ -63,23 +65,34 @@ import { waitForProcessExit } from "../modules/minecraft/infrastructure/process/
 import type { MinecraftServerRepositoryPort } from "../modules/minecraft/domain/ports/minecraft-server-repository.port";
 import type { MinecraftStdinPort } from "../modules/minecraft/domain/ports/minecraft-stdin.port";
 import type { MinecraftLogPort } from "../modules/minecraft/domain/ports/minecraft-log.port";
+import type { LlmService as LlmServiceType } from "../modules/llm/application/llm.service";
+import type { LlmProviderPort } from "../modules/llm/domain/ports/llm-provider.port";
+import { AnthropicAdapter } from "../modules/llm/infrastructure/providers/anthropic.adapter";
+import { OpenAICompatAdapter } from "../modules/llm/infrastructure/providers/openai-compat.adapter";
+import { GeminiAdapter } from "../modules/llm/infrastructure/providers/gemini.adapter";
+import { LlmService } from "../modules/llm/application/llm.service";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
   readonly queryBus: QueryBus;
   readonly guard: JwtGuard;
   readonly logger: LoggerPort;
+  readonly config: ConfigPort;
   readonly serverProcess: ServerProcessPort;
   readonly serverRegistry: ServerRegistryPort;
   readonly minecraftRepository: MinecraftServerRepositoryPort;
   readonly minecraftStdin: MinecraftStdinPort;
   readonly minecraftLog: MinecraftLogPort;
+  readonly llmService: LlmServiceType;
 }
 
 export function createContainer(): AppContainer {
   const commandBus = new CommandBus();
   const queryBus = new QueryBus();
   const logger = new ConsoleLoggerAdapter();
+
+  const configPath = path.join(process.cwd(), "config.json");
+  const config = new ConfigAdapter({ configPath, logger });
 
   const jwtSecret = Bun.env.JWT_SECRET;
   if (!jwtSecret) {
@@ -176,15 +189,46 @@ export function createContainer(): AppContainer {
     new StreamMinecraftLogsHandler(minecraftRepository, serverRegistry, minecraftLog),
   );
 
+  // LLM module
+  const providers = new Map<string, LlmProviderPort>();
+  const llmConfig = config.getLlmConfig();
+  for (const [name, providerConfig] of Object.entries(llmConfig.providers)) {
+    switch (name) {
+      case "anthropic":
+        providers.set(name, new AnthropicAdapter({
+          apiKey: providerConfig.apiKey,
+          baseUrl: providerConfig.baseUrl,
+        }));
+        break;
+      case "google":
+        providers.set(name, new GeminiAdapter({
+          apiKey: providerConfig.apiKey,
+          baseUrl: providerConfig.baseUrl,
+        }));
+        break;
+      default:
+        // All other providers are OpenAI-compatible (openai, openrouter, lmstudio, ollama, groq, etc.)
+        providers.set(name, new OpenAICompatAdapter({
+          apiKey: providerConfig.apiKey,
+          baseUrl: providerConfig.baseUrl,
+        }));
+        break;
+    }
+  }
+
+  const llmService = new LlmService(providers, config, logger);
+
   return {
     commandBus,
     queryBus,
     guard,
     logger,
+    config,
     serverProcess,
     serverRegistry,
     minecraftRepository,
     minecraftStdin,
     minecraftLog,
+    llmService,
   };
 }

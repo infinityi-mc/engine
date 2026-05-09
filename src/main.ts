@@ -51,3 +51,13 @@ const server = Bun.serve({
 const serverUrl = `http://${server.hostname}:${server.port}`;
 
 container.logger.info(`Server started on ${link(serverUrl, serverUrl)}`);
+
+// Graceful shutdown — stop the config file watcher
+process.on("SIGINT", () => {
+  container.config.stop();
+  server.stop();
+});
+process.on("SIGTERM", () => {
+  container.config.stop();
+  server.stop();
+});

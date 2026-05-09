@@ -42,11 +42,13 @@ export class StopMinecraftServerHandler implements CommandHandler<StopMinecraftS
     // Wait for the process to exit on its own
     const exitedGracefully = await this.waitForExit(command.serverId, GRACEFUL_STOP_TIMEOUT_MS);
 
-    if (!exitedGracefully) {
-      // Process didn't exit in time — force-kill
-      await this.serverProcess.kill(command.serverId);
+    try {
+      if (!exitedGracefully) {
+        // Process didn't exit in time — force-kill
+        await this.serverProcess.kill(command.serverId);
+      }
+    } finally {
+      await this.serverRegistry.unregister(command.serverId);
     }
-
-    await this.serverRegistry.unregister(command.serverId);
   }
 }

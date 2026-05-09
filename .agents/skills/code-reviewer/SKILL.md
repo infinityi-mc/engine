@@ -1,4 +1,5 @@
 ---
+name: code-reviewer
 description: Review unstaged Bun+TS HTTP API diffs. Hexagonal + CQRS + EDA. 3-lens parallel review → consolidated report.
 ---
 

@@ -1,0 +1,24 @@
+{
+  "agent": {
+    "defaultProvider": "openrouter",
+    "defaultModel": "anthropic/claude-sonnet-4.5",
+    "providers": {
+      "anthropic": {
+        "apiKey": "ANTHROPIC_API_KEY",
+        "baseUrl": "https://api.anthropic.com"
+      },
+      "openai": {
+        "apiKey": "OPENAI_API_KEY",
+        "baseUrl": "https://api.openai.com"
+      },
+      "google": {
+        "apiKey": "GOOGLE_API_KEY",
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta"
+      },
+      "openrouter": {
+        "apiKey": "OPENROUTER_API_KEY",
+        "baseUrl": "https://openrouter.ai/api/v1"
+      }
+    }
+  }
+}

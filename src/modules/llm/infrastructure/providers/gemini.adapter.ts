@@ -1,0 +1,185 @@
+import type {
+  CompletionRequest,
+  CompletionResponse,
+  TokenUsage,
+} from "../../domain/ports/llm.types";
+import type { LlmProviderPort } from "../../domain/ports/llm-provider.port";
+import {
+  ProviderApiError,
+  ProviderAuthError,
+  ProviderRateLimitError,
+} from "../../domain/errors/llm.errors";
+import { parseRetryAfterMs } from "./shared";
+
+interface GeminiPart {
+  text?: string;
+  thought?: boolean;
+}
+
+interface GeminiContent {
+  role: "user" | "model";
+  parts: GeminiPart[];
+}
+
+interface GeminiResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: GeminiPart[];
+      role?: string;
+    };
+    finishReason?: string;
+  }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
+  };
+  modelVersion?: string;
+}
+
+export interface GeminiAdapterConfig {
+  apiKey: string;
+  baseUrl: string;
+}
+
+export class GeminiAdapter implements LlmProviderPort {
+  constructor(private readonly config: GeminiAdapterConfig) {}
+
+  async complete(request: CompletionRequest): Promise<CompletionResponse> {
+    const body = this.buildRequestBody(request);
+
+    const url = `${this.config.baseUrl}/models/${request.model}:generateContent`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": this.config.apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    await this.handleErrors(response, request.provider);
+
+    const data = (await response.json()) as GeminiResponse;
+
+    return this.translateResponse(data, request.provider, request.model);
+  }
+
+  private buildRequestBody(request: CompletionRequest): Record<string, unknown> {
+    const body: Record<string, unknown> = {};
+
+    const systemMessages = request.messages.filter((m) => m.role === "system");
+    if (systemMessages.length > 0) {
+      body.systemInstruction = {
+        parts: systemMessages.map((m) => ({ text: m.content })),
+      };
+    }
+
+    const nonSystemMessages = request.messages.filter(
+      (m) => m.role !== "system",
+    );
+
+    const contents: GeminiContent[] = [];
+    for (const msg of nonSystemMessages) {
+      const role = msg.role === "assistant" ? "model" : "user";
+      contents.push({
+        role,
+        parts: [{ text: msg.content }],
+      });
+    }
+
+    if (contents.length > 0) {
+      body.contents = contents;
+    }
+
+    const generationConfig: Record<string, unknown> = {};
+    if (request.maxTokens !== undefined) {
+      generationConfig.maxOutputTokens = request.maxTokens;
+    }
+    if (request.temperature !== undefined) {
+      generationConfig.temperature = request.temperature;
+    }
+    if (request.providerOptions) {
+      if (request.providerOptions["thinkingConfig"] !== undefined) {
+        generationConfig.thinkingConfig =
+          request.providerOptions["thinkingConfig"];
+      }
+    }
+    if (Object.keys(generationConfig).length > 0) {
+      body.generationConfig = generationConfig;
+    }
+
+    return body;
+  }
+
+  private translateResponse(
+    data: GeminiResponse,
+    provider: string,
+    requestedModel: string,
+  ): CompletionResponse {
+    const candidate = data.candidates?.[0];
+    const parts = candidate?.content?.parts ?? [];
+
+    let content = "";
+    let reasoning = "";
+
+    for (const part of parts) {
+      if (part.thought) {
+        reasoning += part.text ?? "";
+      } else {
+        content += part.text ?? "";
+      }
+    }
+
+    let stopReason: CompletionResponse["stopReason"] = "unknown";
+    switch (candidate?.finishReason) {
+      case "STOP":
+        stopReason = "stop";
+        break;
+      case "MAX_TOKENS":
+        stopReason = "length";
+        break;
+    }
+
+    const usage: TokenUsage = {
+      inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
+      outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+      reasoningTokens: data.usageMetadata?.thoughtsTokenCount ?? 0,
+      totalTokens:
+        (data.usageMetadata?.promptTokenCount ?? 0) +
+        (data.usageMetadata?.candidatesTokenCount ?? 0) +
+        (data.usageMetadata?.thoughtsTokenCount ?? 0),
+    };
+
+    return {
+      content,
+      reasoning,
+      stopReason,
+      usage,
+      model: requestedModel,
+      provider,
+    };
+  }
+
+  private async handleErrors(
+    response: Response,
+    provider: string,
+  ): Promise<void> {
+    if (response.ok) return;
+
+    if (response.status === 401 || response.status === 403) {
+      throw new ProviderAuthError(provider);
+    }
+
+    if (response.status === 429) {
+      const retryAfterMs = parseRetryAfterMs(
+        response.headers.get("retry-after"),
+      );
+      throw new ProviderRateLimitError(provider, retryAfterMs);
+    }
+
+    const body = await response.text();
+    throw new ProviderApiError(provider, response.status, body);
+  }
+}
