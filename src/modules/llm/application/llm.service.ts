@@ -31,6 +31,10 @@ export class LlmService {
       throw new ProviderNotFoundError(resolvedProvider);
     }
 
+    if (request.messages.length === 0) {
+      throw new Error("messages array cannot be empty");
+    }
+
     const fullRequest: CompletionRequest = {
       provider: resolvedProvider,
       model: resolvedModel,
@@ -46,8 +50,25 @@ export class LlmService {
     if (request.providerOptions !== undefined) {
       fullRequest.providerOptions = request.providerOptions;
     }
+    if (request.stop !== undefined) {
+      fullRequest.stop = request.stop;
+    }
+    if (request.timeoutMs !== undefined) {
+      fullRequest.timeoutMs = request.timeoutMs;
+    }
+    if (request.topP !== undefined) {
+      fullRequest.topP = request.topP;
+    }
+    if (request.frequencyPenalty !== undefined) {
+      fullRequest.frequencyPenalty = request.frequencyPenalty;
+    }
+    if (request.presencePenalty !== undefined) {
+      fullRequest.presencePenalty = request.presencePenalty;
+    }
 
+    const startedAt = Date.now();
     const response = await adapter.complete(fullRequest);
+    const durationMs = Date.now() - startedAt;
 
     this.logger.info("LLM completion", {
       provider: resolvedProvider,
@@ -56,6 +77,7 @@ export class LlmService {
       outputTokens: response.usage.outputTokens,
       reasoningTokens: response.usage.reasoningTokens,
       totalTokens: response.usage.totalTokens,
+      durationMs,
     });
 
     return response;

@@ -169,4 +169,76 @@ describe("LlmService", () => {
     });
     expect(callOrder).toEqual(["openai", "anthropic"]);
   });
+
+  test("throws when messages array is empty", async () => {
+    const mockAdapter: LlmProviderPort = {
+      complete: async () => fakeResponse(),
+    };
+    const providers = new Map([["openai", mockAdapter]]);
+    const service = new LlmService(providers, makeFakeConfig(), makeFakeLogger());
+
+    await expect(
+      service.complete({ messages: [] }),
+    ).rejects.toThrow("messages array cannot be empty");
+  });
+
+  test("logs completion with durationMs", async () => {
+    const logs: Array<{ message: string; context: Record<string, unknown> }> = [];
+    const logger: LoggerPort = {
+      debug: () => {},
+      info: (msg: string, ctx: Record<string, unknown>) => { logs.push({ message: msg, context: ctx }); },
+      warn: () => {},
+      error: () => {},
+    };
+
+    const mockAdapter: LlmProviderPort = {
+      complete: async () => fakeResponse({
+        usage: { inputTokens: 10, outputTokens: 20, reasoningTokens: 5, totalTokens: 35 },
+      }),
+    };
+
+    const providers = new Map([["openai", mockAdapter]]);
+    const service = new LlmService(providers, makeFakeConfig(), logger);
+
+    await service.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.message).toBe("LLM completion");
+    expect(typeof logs[0]!.context.durationMs).toBe("number");
+    expect(logs[0]!.context.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test("passes stop, timeoutMs, topP, frequencyPenalty, presencePenalty through to adapter", async () => {
+    let capturedRequest: CompletionRequest | null = null;
+    const mockAdapter: LlmProviderPort = {
+      complete: async (req: CompletionRequest) => {
+        capturedRequest = req;
+        return fakeResponse();
+      },
+    };
+
+    const providers = new Map([["openai", mockAdapter]]);
+    const service = new LlmService(providers, makeFakeConfig(), makeFakeLogger());
+
+    await service.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+      stop: ["END"],
+      timeoutMs: 60_000,
+      topP: 0.9,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.3,
+    });
+
+    expect(capturedRequest!.stop).toEqual(["END"]);
+    expect(capturedRequest!.timeoutMs).toBe(60_000);
+    expect(capturedRequest!.topP).toBe(0.9);
+    expect(capturedRequest!.frequencyPenalty).toBe(0.5);
+    expect(capturedRequest!.presencePenalty).toBe(0.3);
+  });
 });

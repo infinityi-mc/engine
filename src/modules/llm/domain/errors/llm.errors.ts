@@ -64,3 +64,14 @@ export class ProviderRateLimitError extends Error {
     super(msg);
   }
 }
+
+export class ProviderTimeoutError extends Error {
+  readonly name = "ProviderTimeoutError";
+
+  constructor(
+    public readonly provider: string,
+    public readonly timeoutMs: number,
+  ) {
+    super(`Request to ${provider} timed out after ${timeoutMs}ms`);
+  }
+}

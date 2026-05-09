@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpenAICompatAdapter } from "../../../src/modules/llm/infrastructure/providers/openai-compat.adapter";
-import {
-  ProviderAuthError,
-  ProviderRateLimitError,
-  ProviderApiError,
-} from "../../../src/modules/llm/domain/errors/llm.errors";
+import { ProviderAuthError, ProviderRateLimitError, ProviderApiError } from "../../../src/modules/llm/domain/errors/llm.errors";
 import { makeMockResponse } from "../../helpers/mock-response";
 
 const FAKE_API_KEY = "test-api-key";
@@ -254,5 +250,96 @@ describe("OpenAICompatAdapter", () => {
     await expect(
       adapter.complete({ provider: "openai", model: "gpt-4o", messages: [] }),
     ).rejects.toThrow(ProviderApiError);
+  });
+
+  test("maps content_filter finish reason to error", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      model: "gpt-4o",
+      choices: [{
+        message: { role: "assistant", content: "" },
+        finish_reason: "content_filter",
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
+    });
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    const response = await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.stopReason).toBe("error");
+  });
+
+  test("wraps network TypeError in ProviderApiError", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => { throw new TypeError("fetch failed"); };
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    await expect(
+      adapter.complete({ provider: "openai", model: "gpt-4o", messages: [{ role: "user", content: "Hi" }] }),
+    ).rejects.toThrow(ProviderApiError);
+  });
+
+  test("passes stop sequences to request body", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        choices: [{ message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    };
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+      stop: ["END", "DONE"],
+    });
+
+    expect(capturedBody.stop).toEqual(["END", "DONE"]);
+  });
+
+  test("passes topP, frequencyPenalty, presencePenalty to request body", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        choices: [{ message: { role: "assistant", content: "Hi" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    };
+
+    const adapter = new OpenAICompatAdapter({
+      apiKey: FAKE_API_KEY,
+      baseUrl: "https://api.openai.com",
+    });
+    await adapter.complete({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Hi" }],
+      topP: 0.9,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.3,
+    });
+
+    expect(capturedBody.top_p).toBe(0.9);
+    expect(capturedBody.frequency_penalty).toBe(0.5);
+    expect(capturedBody.presence_penalty).toBe(0.3);
   });
 });

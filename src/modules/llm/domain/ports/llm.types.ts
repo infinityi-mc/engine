@@ -9,6 +9,11 @@ export interface CompletionRequest {
   messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
+  stop?: string[];
+  timeoutMs?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
   providerOptions?: Record<string, unknown>;
 }
 

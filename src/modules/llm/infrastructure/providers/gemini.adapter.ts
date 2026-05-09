@@ -9,7 +9,7 @@ import {
   ProviderAuthError,
   ProviderRateLimitError,
 } from "../../domain/errors/llm.errors";
-import { parseRetryAfterMs } from "./shared";
+import { parseRetryAfterMs, fetchWithTimeout } from "./shared";
 
 interface GeminiPart {
   text?: string;
@@ -50,14 +50,19 @@ export class GeminiAdapter implements LlmProviderPort {
 
     const url = `${this.config.baseUrl}/models/${request.model}:generateContent`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": this.config.apiKey,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      request.provider,
+      url,
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": this.config.apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+      request.timeoutMs,
+    );
 
     await this.handleErrors(response, request.provider);
 
@@ -100,6 +105,12 @@ export class GeminiAdapter implements LlmProviderPort {
     if (request.temperature !== undefined) {
       generationConfig.temperature = request.temperature;
     }
+    if (request.topP !== undefined) {
+      generationConfig.topP = request.topP;
+    }
+    if (request.stop !== undefined) {
+      generationConfig.stopSequences = request.stop;
+    }
     if (request.providerOptions) {
       if (request.providerOptions["thinkingConfig"] !== undefined) {
         generationConfig.thinkingConfig =
@@ -119,6 +130,9 @@ export class GeminiAdapter implements LlmProviderPort {
     requestedModel: string,
   ): CompletionResponse {
     const candidate = data.candidates?.[0];
+    if (!candidate) {
+      throw new ProviderApiError(provider, 200, "Gemini response has no candidates");
+    }
     const parts = candidate?.content?.parts ?? [];
 
     let content = "";
@@ -140,6 +154,10 @@ export class GeminiAdapter implements LlmProviderPort {
       case "MAX_TOKENS":
         stopReason = "length";
         break;
+      case "SAFETY":
+      case "BLOCKED":
+        stopReason = "error";
+        break;
     }
 
     const usage: TokenUsage = {
@@ -157,7 +175,7 @@ export class GeminiAdapter implements LlmProviderPort {
       reasoning,
       stopReason,
       usage,
-      model: requestedModel,
+      model: data.modelVersion ?? requestedModel,
       provider,
     };
   }

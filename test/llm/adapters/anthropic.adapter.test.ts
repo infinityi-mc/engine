@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AnthropicAdapter } from "../../../src/modules/llm/infrastructure/providers/anthropic.adapter";
-import { ProviderAuthError, ProviderRateLimitError, ProviderApiError } from "../../../src/modules/llm/domain/errors/llm.errors";
+import { ProviderAuthError, ProviderRateLimitError, ProviderApiError, ProviderTimeoutError } from "../../../src/modules/llm/domain/errors/llm.errors";
 import { makeMockResponse } from "../../helpers/mock-response";
 
 const FAKE_API_KEY = "test-api-key";
@@ -282,5 +282,102 @@ describe("AnthropicAdapter", () => {
     await expect(
       adapter.complete({ provider: "anthropic", model: "claude-sonnet-4.5", messages: [] }),
     ).rejects.toThrow(ProviderApiError);
+  });
+
+  test("maps stop_sequence stop reason to stop", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      content: [{ type: "text", text: "Done" }],
+      stop_reason: "stop_sequence",
+      usage: { input_tokens: 1, output_tokens: 1 },
+      model: "claude-sonnet-4.5",
+    });
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.stopReason).toBe("stop");
+  });
+
+  test("wraps network TypeError in ProviderApiError", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => { throw new TypeError("fetch failed"); };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await expect(
+      adapter.complete({ provider: "anthropic", model: "claude-sonnet-4.5", messages: [{ role: "user", content: "Hi" }] }),
+    ).rejects.toThrow(ProviderApiError);
+  });
+
+  test("throws ProviderTimeoutError when fetch aborts", async () => {
+    const abortError = new DOMException("The user aborted a request.", "AbortError");
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => { throw abortError; };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const err = await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "Hi" }],
+    }).catch((e: unknown) => e) as ProviderTimeoutError;
+    expect(err.name).toBe("ProviderTimeoutError");
+    expect(err.provider).toBe("anthropic");
+    expect(err.timeoutMs).toBe(30000);
+  });
+
+  test("passes stop sequences to request body", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        content: [{ type: "text", text: "Hi" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        model: "claude-sonnet-4.5",
+      });
+    };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "Hi" }],
+      stop: ["END", "STOP"],
+    });
+
+    expect(capturedBody.stop_sequences).toEqual(["END", "STOP"]);
+  });
+
+  test("passes topP, frequencyPenalty, presencePenalty to request body", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        content: [{ type: "text", text: "Hi" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        model: "claude-sonnet-4.5",
+      });
+    };
+
+    const adapter = new AnthropicAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "anthropic",
+      model: "claude-sonnet-4.5",
+      messages: [{ role: "user", content: "Hi" }],
+      topP: 0.9,
+      frequencyPenalty: 0.5,
+      presencePenalty: 0.3,
+    });
+
+    expect(capturedBody.top_p).toBe(0.9);
+    expect(capturedBody.frequency_penalty).toBe(0.5);
+    expect(capturedBody.presence_penalty).toBe(0.3);
   });
 });

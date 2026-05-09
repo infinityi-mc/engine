@@ -9,7 +9,7 @@ import {
   ProviderAuthError,
   ProviderRateLimitError,
 } from "../../domain/errors/llm.errors";
-import { parseRetryAfterMs } from "./shared";
+import { parseRetryAfterMs, fetchWithTimeout } from "./shared";
 
 interface OpenAIChatMessage {
   role: "system" | "user" | "assistant";
@@ -46,14 +46,19 @@ export class OpenAICompatAdapter implements LlmProviderPort {
 
     const baseUrl = this.config.baseUrl.replace(/\/v1\/?$/, "");
 
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      request.provider,
+      `${baseUrl}/v1/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+      request.timeoutMs,
+    );
 
     await this.handleErrors(response, request.provider);
 
@@ -79,6 +84,19 @@ export class OpenAICompatAdapter implements LlmProviderPort {
 
     if (request.temperature !== undefined) {
       body.temperature = request.temperature;
+    }
+
+    if (request.topP !== undefined) {
+      body.top_p = request.topP;
+    }
+    if (request.frequencyPenalty !== undefined) {
+      body.frequency_penalty = request.frequencyPenalty;
+    }
+    if (request.presencePenalty !== undefined) {
+      body.presence_penalty = request.presencePenalty;
+    }
+    if (request.stop !== undefined) {
+      body.stop = request.stop;
     }
 
     if (request.providerOptions) {
@@ -117,6 +135,9 @@ export class OpenAICompatAdapter implements LlmProviderPort {
         break;
       case "length":
         stopReason = "length";
+        break;
+      case "content_filter":
+        stopReason = "error";
         break;
     }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GeminiAdapter } from "../../../src/modules/llm/infrastructure/providers/gemini.adapter";
-import { ProviderAuthError, ProviderRateLimitError, ProviderApiError } from "../../../src/modules/llm/domain/errors/llm.errors";
+import { ProviderAuthError, ProviderRateLimitError, ProviderApiError, ProviderTimeoutError } from "../../../src/modules/llm/domain/errors/llm.errors";
 import { makeMockResponse } from "../../helpers/mock-response";
 
 const FAKE_API_KEY = "test-api-key";
@@ -264,5 +264,119 @@ describe("GeminiAdapter", () => {
     await expect(
       adapter.complete({ provider: "google", model: "gemini-2.0-flash", messages: [] }),
     ).rejects.toThrow(ProviderApiError);
+  });
+
+  test("throws ProviderApiError when candidates array is empty", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 0 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const err = (await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    }).catch((e: unknown) => e)) as ProviderApiError;
+    expect(err.statusCode).toBe(200);
+    expect(err.responseBody).toContain("Gemini response has no candidates");
+  });
+
+  test("maps SAFETY finish reason to error", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: { parts: [{ text: "" }] },
+        finishReason: "SAFETY",
+      }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 0 },
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.stopReason).toBe("error");
+  });
+
+  test("uses modelVersion from response, falls back to requested model", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => makeMockResponse({
+      candidates: [{
+        content: { parts: [{ text: "Hello" }] },
+        finishReason: "STOP",
+      }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      modelVersion: "gemini-2.0-flash-001",
+    });
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    const response = await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(response.model).toBe("gemini-2.0-flash-001");
+  });
+
+  test("wraps network TypeError in ProviderApiError", async () => {
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async () => { throw new TypeError("fetch failed"); };
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await expect(
+      adapter.complete({ provider: "google", model: "gemini-2.0-flash", messages: [{ role: "user", content: "Hi" }] }),
+    ).rejects.toThrow(ProviderApiError);
+  });
+
+  test("passes stop sequences to generationConfig", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        candidates: [{ content: { parts: [{ text: "Hi" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      });
+    };
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+      stop: ["END", "DONE"],
+    });
+
+    const genConfig = capturedBody.generationConfig as Record<string, unknown>;
+    expect(genConfig.stopSequences).toEqual(["END", "DONE"]);
+  });
+
+  test("passes topP to generationConfig", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    // @ts-ignore - mock fetch for testing
+    globalThis.fetch = async (url, init) => {
+      capturedBody = JSON.parse((init?.body as string | undefined) ?? "{}");
+      return makeMockResponse({
+        candidates: [{ content: { parts: [{ text: "Hi" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      });
+    };
+
+    const adapter = new GeminiAdapter({ apiKey: FAKE_API_KEY, baseUrl: FAKE_BASE_URL });
+    await adapter.complete({
+      provider: "google",
+      model: "gemini-2.0-flash",
+      messages: [{ role: "user", content: "Hi" }],
+      topP: 0.8,
+    });
+
+    const genConfig = capturedBody.generationConfig as Record<string, unknown>;
+    expect(genConfig.topP).toBe(0.8);
   });
 });

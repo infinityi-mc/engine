@@ -9,7 +9,7 @@ import {
   ProviderAuthError,
   ProviderRateLimitError,
 } from "../../domain/errors/llm.errors";
-import { parseRetryAfterMs } from "./shared";
+import { parseRetryAfterMs, fetchWithTimeout } from "./shared";
 
 const DEFAULT_MAX_TOKENS = 4096;
 
@@ -47,7 +47,8 @@ export class AnthropicAdapter implements LlmProviderPort {
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
     const body = this.buildRequestBody(request);
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
+      request.provider,
       `${this.config.baseUrl}/v1/messages`,
       {
         method: "POST",
@@ -58,6 +59,7 @@ export class AnthropicAdapter implements LlmProviderPort {
         },
         body: JSON.stringify(body),
       },
+      request.timeoutMs,
     );
 
     await this.handleErrors(response, request.provider);
@@ -90,6 +92,19 @@ export class AnthropicAdapter implements LlmProviderPort {
 
     if (request.temperature !== undefined) {
       body.temperature = request.temperature;
+    }
+
+    if (request.topP !== undefined) {
+      body.top_p = request.topP;
+    }
+    if (request.frequencyPenalty !== undefined) {
+      body.frequency_penalty = request.frequencyPenalty;
+    }
+    if (request.presencePenalty !== undefined) {
+      body.presence_penalty = request.presencePenalty;
+    }
+    if (request.stop !== undefined) {
+      body.stop_sequences = request.stop;
     }
 
     if (request.providerOptions) {
@@ -126,6 +141,9 @@ export class AnthropicAdapter implements LlmProviderPort {
         break;
       case "max_tokens":
         stopReason = "length";
+        break;
+      case "stop_sequence":
+        stopReason = "stop";
         break;
     }
 
