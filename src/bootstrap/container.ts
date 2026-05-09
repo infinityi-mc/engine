@@ -99,7 +99,7 @@ export function createContainer(): AppContainer {
   const queryBus = new QueryBus();
   const logger = new ConsoleLoggerAdapter();
 
-  const configPath = path.join(process.cwd(), "config.json");
+  const configPath = path.join(process.cwd(), "config.yaml");
   const config = new ConfigAdapter({ configPath, logger });
 
   const jwtSecret = Bun.env.JWT_SECRET;
@@ -158,7 +158,10 @@ export function createContainer(): AppContainer {
 
   // Minecraft module
   const dataDir = Bun.env.DATA_DIR ?? path.join(process.cwd(), "data");
-  const minecraftRepository = new JsonMinecraftServerRepositoryAdapter(logger, dataDir);
+  const minecraftRepository = new JsonMinecraftServerRepositoryAdapter(
+    logger,
+    dataDir,
+  );
   const minecraftStdin = new BunMinecraftStdinAdapter(serverProcess);
   const minecraftLog = new BunMinecraftLogAdapter(serverProcess);
   const minecraftWaitForExit = waitForProcessExit(serverProcess);
@@ -169,11 +172,21 @@ export function createContainer(): AppContainer {
   );
   commandBus.register(
     START_MINECRAFT_SERVER_COMMAND,
-    new StartMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry),
+    new StartMinecraftServerHandler(
+      minecraftRepository,
+      serverProcess,
+      serverRegistry,
+    ),
   );
   commandBus.register(
     STOP_MINECRAFT_SERVER_COMMAND,
-    new StopMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry, minecraftStdin, minecraftWaitForExit),
+    new StopMinecraftServerHandler(
+      minecraftRepository,
+      serverProcess,
+      serverRegistry,
+      minecraftStdin,
+      minecraftWaitForExit,
+    ),
   );
   commandBus.register(
     DELETE_MINECRAFT_SERVER_COMMAND,
@@ -181,7 +194,11 @@ export function createContainer(): AppContainer {
   );
   commandBus.register(
     SEND_MINECRAFT_COMMAND_COMMAND,
-    new SendMinecraftCommandHandler(minecraftRepository, serverRegistry, minecraftStdin),
+    new SendMinecraftCommandHandler(
+      minecraftRepository,
+      serverRegistry,
+      minecraftStdin,
+    ),
   );
 
   queryBus.register(
@@ -194,7 +211,11 @@ export function createContainer(): AppContainer {
   );
   queryBus.register(
     STREAM_MINECRAFT_LOGS_QUERY,
-    new StreamMinecraftLogsHandler(minecraftRepository, serverRegistry, minecraftLog),
+    new StreamMinecraftLogsHandler(
+      minecraftRepository,
+      serverRegistry,
+      minecraftLog,
+    ),
   );
 
   // LLM module
@@ -203,23 +224,32 @@ export function createContainer(): AppContainer {
   for (const [name, providerConfig] of Object.entries(llmConfig.providers)) {
     switch (name) {
       case "anthropic":
-        providers.set(name, new AnthropicAdapter({
-          apiKey: providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl,
-        }));
+        providers.set(
+          name,
+          new AnthropicAdapter({
+            apiKey: providerConfig.apiKey,
+            baseUrl: providerConfig.baseUrl,
+          }),
+        );
         break;
       case "google":
-        providers.set(name, new GeminiAdapter({
-          apiKey: providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl,
-        }));
+        providers.set(
+          name,
+          new GeminiAdapter({
+            apiKey: providerConfig.apiKey,
+            baseUrl: providerConfig.baseUrl,
+          }),
+        );
         break;
       default:
         // All other providers are OpenAI-compatible (openai, openrouter, lmstudio, ollama, groq, etc.)
-        providers.set(name, new OpenAICompatAdapter({
-          apiKey: providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl,
-        }));
+        providers.set(
+          name,
+          new OpenAICompatAdapter({
+            apiKey: providerConfig.apiKey,
+            baseUrl: providerConfig.baseUrl,
+          }),
+        );
         break;
     }
   }

@@ -38,10 +38,10 @@ describe("config-loader", () => {
     const original = Bun.env.OPENAI_API_KEY;
     Bun.env.OPENAI_API_KEY = "sk-test-key-123";
     try {
-      const { config, rawJson } = loadConfig({ configPath });
+      const { config, rawConfig } = loadConfig({ configPath });
       expect(config.llm.defaultProvider).toBe("openai");
       expect(config.llm.providers.openai?.apiKey).toBe("sk-test-key-123");
-      expect(rawJson).toBeDefined();
+      expect(rawConfig).toBeDefined();
     } finally {
       if (original === undefined) {
         delete Bun.env.OPENAI_API_KEY;
@@ -52,13 +52,13 @@ describe("config-loader", () => {
   });
 
   test("returns default config when file is missing", () => {
-    const { config, rawJson } = loadConfig({
+    const { config, rawConfig } = loadConfig({
       configPath: path.join(directory, "nonexistent.json"),
     });
 
     expect(config.llm.defaultProvider).toBe("none");
     expect(config.llm.defaultModel).toBe("none");
-    expect(rawJson).toBeDefined();
+    expect(rawConfig).toBeDefined();
   });
 
   test("default config includes anthropic, openai, google providers", () => {
@@ -99,7 +99,7 @@ describe("config-loader", () => {
     const filePath = path.join(directory, "config.json");
     await writeFile(filePath, "{ invalid json }", "utf-8");
     expect(() => loadConfig({ configPath: filePath })).toThrow(
-      "Failed to parse config JSON",
+      "Failed to parse config",
     );
   });
 

@@ -83,4 +83,4 @@ Present in `src/shared/` but not yet wired into the system. Reserved for future 
 
 ### Persistence
 - Persistent data (files, databases) must be stored inside `data/`.
-- Application configuration stored in `config.json`.
+- Application configuration stored in `config.yaml`.

@@ -8,7 +8,7 @@ dist/
 .agents/
 .claude
 data/temp
-config.json
+config.yaml
 scratch/
 data/
 docs/
