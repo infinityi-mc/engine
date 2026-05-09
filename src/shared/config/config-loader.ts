@@ -88,6 +88,7 @@ function resolveEnvVars(config: AppConfig): AppConfig {
       ...config.llm,
       providers: resolvedProviders,
     },
+    ...(config.agent ? { agent: config.agent } : {}),
   };
 }
 

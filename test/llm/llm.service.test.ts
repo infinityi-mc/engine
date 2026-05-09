@@ -20,6 +20,7 @@ function makeFakeConfig(defaultProvider = "openai", defaultModel = "gpt-4o"): Co
   return {
     getConfig: () => ({ llm: { defaultProvider, defaultModel, providers: {} } }),
     getLlmConfig: () => ({ defaultProvider, defaultModel, providers: {} }),
+    getAgentConfig: () => undefined,
     getApiKey: () => "",
     getBaseUrl: () => "",
     onChange: () => () => {},

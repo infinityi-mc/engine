@@ -4,6 +4,7 @@ import { Router } from "./shared/http/router";
 import { registerSystemRoutes } from "./modules/system/infrastructure/http/system-routes";
 import { registerServerRoutes } from "./modules/server/infrastructure/http/server-routes";
 import { registerMinecraftRoutes } from "./modules/minecraft/infrastructure/http/minecraft-routes";
+import { registerAgentRoutes } from "./modules/agent/infrastructure/http/agent-routes";
 
 const port = Number(Bun.env.PORT ?? 3000);
 const hostname = Bun.env.HOST ?? "localhost";
@@ -31,6 +32,12 @@ registerMinecraftRoutes(
   router,
   container.commandBus,
   container.queryBus,
+  container.guard,
+  container.logger,
+);
+registerAgentRoutes(
+  router,
+  container.agentService,
   container.guard,
   container.logger,
 );

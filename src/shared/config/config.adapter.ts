@@ -48,6 +48,10 @@ export class ConfigAdapter implements ConfigPort {
     return this.config.llm;
   }
 
+  getAgentConfig(): AppConfig["agent"] {
+    return this.config.agent;
+  }
+
   getApiKey(provider: string): string {
     const p = this.config.llm.providers[provider];
     if (!p) {
