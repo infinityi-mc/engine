@@ -79,6 +79,7 @@ import type { ToolRegistryPort } from "../modules/agent/domain/ports/tool-regist
 import { InMemoryToolRegistry } from "../modules/agent/infrastructure/registry/tool-registry.adapter";
 import { ConfigAgentDefinitionRepository } from "../modules/agent/infrastructure/persistence/agent-definition-repository.adapter";
 import { RunPythonTool } from "../modules/agent/infrastructure/tools/run-python.tool";
+import { ReadMinecraftLogsTool } from "../modules/agent/infrastructure/tools/read-minecraft-logs.tool";
 import { AgentService } from "../modules/agent/application/agent.service";
 import { FileSessionRepository } from "../modules/agent/infrastructure/persistence/file-session-repository.adapter";
 import type { SessionRepositoryPort } from "../modules/agent/domain/ports/session-repository.port";
@@ -269,6 +270,7 @@ export function createContainer(): AppContainer {
   // Agent module
   const toolRegistry = new InMemoryToolRegistry(logger);
   toolRegistry.register(new RunPythonTool(terminal, logger));
+  toolRegistry.register(new ReadMinecraftLogsTool(minecraftRepository, logger));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, logger);
   const sessionRepository = new FileSessionRepository({
