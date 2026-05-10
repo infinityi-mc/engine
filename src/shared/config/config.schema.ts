@@ -29,7 +29,18 @@ const AgentConfigSchema = z.object({
   agents: z.record(z.string(), AgentDefinitionSchema),
 });
 
+const MinecraftAgentConfigSchema = z.object({
+  messageCap: z.number().positive().default(50),
+  sessionTtlMs: z.number().positive().default(172_800_000),
+  playerCooldownMs: z.number().positive().default(5_000),
+});
+
+const MinecraftConfigSchema = z.object({
+  agent: MinecraftAgentConfigSchema.optional(),
+});
+
 export const ConfigSchema = z.object({
   llm: LlmConfigSchema,
   agent: AgentConfigSchema.optional(),
+  minecraft: MinecraftConfigSchema.optional(),
 });

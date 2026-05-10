@@ -21,6 +21,7 @@ function makeFakeConfig(defaultProvider = "openai", defaultModel = "gpt-4o"): Co
     getConfig: () => ({ llm: { defaultProvider, defaultModel, providers: {} } }),
     getLlmConfig: () => ({ defaultProvider, defaultModel, providers: {} }),
     getAgentConfig: () => undefined,
+    getMinecraftAgentConfig: () => ({ messageCap: 50, sessionTtlMs: 172_800_000, playerCooldownMs: 5_000 }),
     getApiKey: () => "",
     getBaseUrl: () => "",
     onChange: () => () => {},

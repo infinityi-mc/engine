@@ -84,7 +84,11 @@ import { RunPythonTool } from "../modules/agent/infrastructure/tools/run-python.
 import { ReadMinecraftLogsTool } from "../modules/agent/infrastructure/tools/read-minecraft-logs.tool";
 import { AgentService } from "../modules/agent/application/agent.service";
 import { FileSessionRepository } from "../modules/agent/infrastructure/persistence/file-session-repository.adapter";
+import { MinecraftSessionManagerAdapter } from "../modules/agent/infrastructure/session/minecraft-session-manager.adapter";
+import { MinecraftAgentEventHandler } from "../modules/agent/application/events/minecraft-agent-event.handler";
 import type { SessionRepositoryPort } from "../modules/agent/domain/ports/session-repository.port";
+import { MinecraftRateLimiterAdapter } from "../modules/minecraft/infrastructure/rate-limit/minecraft-rate-limiter.adapter";
+import { MINECRAFT_LOG_PATTERN_MATCHED } from "../modules/minecraft/domain/events/minecraft-log-pattern-matched.event";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -179,9 +183,9 @@ export function createContainer(): AppContainer {
   const minecraftLog = new BunMinecraftLogAdapter(serverProcess, logger);
   const minecraftWaitForExit = waitForProcessExit(serverProcess);
   const patternRegistry = new InMemoryPatternRegistryAdapter();
-  const minecraftLogListener = new MinecraftLogListener(minecraftLog, patternRegistry, eventBus, logger);
+  const minecraftLogListener = new MinecraftLogListener(minecraftLog, patternRegistry, eventBus, minecraftRepository, logger);
 
-  patternRegistry.register("@ai", { action: "invoke_agent", payload: { agentName: "default" } });
+  patternRegistry.register("@ai", { action: "invoke_agent", payload: { agentName: "minecraft-ingame" } });
 
   commandBus.register(
     CREATE_MINECRAFT_SERVER_COMMAND,
@@ -293,6 +297,24 @@ export function createContainer(): AppContainer {
     config,
     logger,
   });
+
+  // Minecraft agent integration
+  const minecraftAgentConfig = config.getMinecraftAgentConfig();
+  const minecraftSessionManager = new MinecraftSessionManagerAdapter({
+    sessionRepository,
+    messageCap: minecraftAgentConfig.messageCap,
+    sessionTtlMs: minecraftAgentConfig.sessionTtlMs,
+  });
+  const minecraftRateLimiter = new MinecraftRateLimiterAdapter(minecraftAgentConfig.playerCooldownMs);
+  const minecraftAgentEventHandler = new MinecraftAgentEventHandler({
+    agentService,
+    sessionManager: minecraftSessionManager,
+    rateLimiter: minecraftRateLimiter,
+    stdin: minecraftStdin,
+    repository: minecraftRepository,
+    logger,
+  });
+  eventBus.subscribe(MINECRAFT_LOG_PATTERN_MATCHED, minecraftAgentEventHandler);
 
   return {
     commandBus,

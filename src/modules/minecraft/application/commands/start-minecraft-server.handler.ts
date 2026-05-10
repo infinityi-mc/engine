@@ -36,7 +36,7 @@ export class StartMinecraftServerHandler implements CommandHandler<StartMinecraf
 
     await this.serverRegistry.register(instance);
 
-    this.logListener.startListening(server.id);
+    await this.logListener.startListening(server.id);
 
     return instance;
   }

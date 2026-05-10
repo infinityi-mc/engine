@@ -45,6 +45,7 @@ function makeFakeConfig(): ConfigPort {
       defaultTimeoutMs: 300_000,
       agents: {},
     }),
+    getMinecraftAgentConfig: () => ({ messageCap: 50, sessionTtlMs: 172_800_000, playerCooldownMs: 5_000 }),
     getApiKey: () => "",
     getBaseUrl: () => "",
     onChange: () => () => {},

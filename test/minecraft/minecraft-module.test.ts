@@ -86,7 +86,7 @@ describe("minecraft module", () => {
     minecraftLog = new BunMinecraftLogAdapter(serverProcess, noopLogger);
     const minecraftWaitForExit = waitForProcessExit(serverProcess);
     const noopPatternRegistry = new InMemoryPatternRegistryAdapter();
-    const noopLogListener = new MinecraftLogListener(minecraftLog, noopPatternRegistry, new EventBus(), noopLogger);
+    const noopLogListener = new MinecraftLogListener(minecraftLog, noopPatternRegistry, new EventBus(), minecraftRepository, noopLogger);
     // Use a short timeout for tests since test processes don't respond to /stop
     const testWaitForExit = (instanceId: string, _timeoutMs: number) =>
       minecraftWaitForExit(instanceId, 500);
@@ -326,7 +326,7 @@ describe("minecraft module", () => {
     const ms = new BunMinecraftStdinAdapter(sp);
     const ml = new BunMinecraftLogAdapter(sp, noopLogger);
     const noopPr = new InMemoryPatternRegistryAdapter();
-    const noopLl = new MinecraftLogListener(ml, noopPr, new EventBus(), noopLogger);
+    const noopLl = new MinecraftLogListener(ml, noopPr, new EventBus(), mr, noopLogger);
 
     const { CommandBus } = await import("../../src/shared/application/command-bus");
     const { QueryBus } = await import("../../src/shared/application/query-bus");
@@ -530,7 +530,7 @@ describe("minecraft module", () => {
     const ms = new BunMinecraftStdinAdapter(sp);
     const ml = new BunMinecraftLogAdapter(sp, noopLogger);
     const noopPr2 = new InMemoryPatternRegistryAdapter();
-    const noopLl2 = new MinecraftLogListener(ml, noopPr2, new EventBus(), noopLogger);
+    const noopLl2 = new MinecraftLogListener(ml, noopPr2, new EventBus(), mr, noopLogger);
 
     commandBus.register(SPAWN_SERVER_COMMAND, new SpawnServerHandler(sp, sr));
     commandBus.register(KILL_SERVER_COMMAND, new KillServerHandler(sp, sr));

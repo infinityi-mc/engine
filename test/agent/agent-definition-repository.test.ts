@@ -22,6 +22,7 @@ function makeFakeConfig(agentConfig?: AppConfig["agent"]): FakeConfigPort {
     }),
     getLlmConfig: () => ({ defaultProvider: "test", defaultModel: "test-model", providers: {} }),
     getAgentConfig: () => currentAgentConfig,
+    getMinecraftAgentConfig: () => ({ messageCap: 50, sessionTtlMs: 172_800_000, playerCooldownMs: 5_000 }),
     getApiKey: () => "",
     getBaseUrl: () => "",
     onChange: (listener: (config: AppConfig) => void) => {

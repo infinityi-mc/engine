@@ -52,6 +52,14 @@ export class ConfigAdapter implements ConfigPort {
     return this.config.agent;
   }
 
+  getMinecraftAgentConfig(): NonNullable<NonNullable<AppConfig["minecraft"]>["agent"]> {
+    return this.config.minecraft?.agent ?? {
+      messageCap: 50,
+      sessionTtlMs: 172_800_000,
+      playerCooldownMs: 5_000,
+    };
+  }
+
   getApiKey(provider: string): string {
     const p = this.config.llm.providers[provider];
     if (!p) {
