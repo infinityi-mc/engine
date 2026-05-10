@@ -2,16 +2,19 @@ import type { ChatMessage, CompletionResponse, ToolCall, ToolDefinition } from "
 import type { LlmService } from "../../../llm/application/llm.service";
 import type { TokenUsage } from "../../../llm/domain/ports/llm.types";
 import type { ToolRegistryPort } from "../../domain/ports/tool-registry.port";
+import type { SessionRepositoryPort } from "../../domain/ports/session-repository.port";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import type { AgentDefinition, AgentRunResult, AgentSession } from "../../domain/types/agent.types";
 import {
   MaxIterationsReachedError,
   SessionTimeoutError,
 } from "../../domain/errors/agent.errors";
+import { saveSession } from "./save-session";
 
 export interface ToolUseLoopDeps {
   readonly llmService: LlmService;
   readonly toolRegistry: ToolRegistryPort;
+  readonly sessionRepository: SessionRepositoryPort;
   readonly logger: LoggerPort;
 }
 
@@ -41,6 +44,7 @@ export class ToolUseLoop {
       if (elapsed >= timeoutMs) {
         session.status = "failed";
         session.completedAt = Date.now();
+        await saveSession(this.deps.sessionRepository, session, this.deps.logger);
         const partial = this.buildResult(session, "timeout");
         throw new SessionTimeoutError(timeoutMs, partial);
       }
@@ -64,6 +68,9 @@ export class ToolUseLoop {
       } catch (error) {
         session.status = "failed";
         session.completedAt = Date.now();
+        try {
+          await saveSession(this.deps.sessionRepository, session, this.deps.logger);
+        } catch { /* swallow — don't mask the original error */ }
         throw error;
       }
 
@@ -84,6 +91,7 @@ export class ToolUseLoop {
       if (response.stopReason !== "tool_calls" || !response.toolCalls || response.toolCalls.length === 0) {
         session.status = "completed";
         session.completedAt = Date.now();
+        await saveSession(this.deps.sessionRepository, session, this.deps.logger);
 
         this.deps.logger.info("agent.session_completed", {
           sessionId: session.sessionId,
@@ -101,11 +109,15 @@ export class ToolUseLoop {
 
       // Append tool result messages
       session.messages.push(...toolResultMessages);
+
+      // Eager save after each iteration
+      await saveSession(this.deps.sessionRepository, session, this.deps.logger);
     }
 
     // Max iterations reached
     session.status = "failed";
     session.completedAt = Date.now();
+    await saveSession(this.deps.sessionRepository, session, this.deps.logger);
     const partial = this.buildResult(session, "max_iterations");
 
     this.deps.logger.warn("agent.max_iterations_reached", {
@@ -209,6 +221,7 @@ export class ToolUseLoop {
     }
 
     return {
+      sessionId: session.sessionId,
       content,
       reasoning: "",
       status: session.status,

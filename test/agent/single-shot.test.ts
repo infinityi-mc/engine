@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SingleShotRuntime } from "../../src/modules/agent/application/runtime/single-shot";
 import type { LlmService } from "../../src/modules/llm/application/llm.service";
+import type { SessionRepositoryPort } from "../../src/modules/agent/domain/ports/session-repository.port";
 import type { LoggerPort } from "../../src/shared/observability/logger.port";
 import type { CompletionResponse, TokenUsage } from "../../src/modules/llm/domain/ports/llm.types";
 import type { AgentDefinition, AgentSession } from "../../src/modules/agent/domain/types/agent.types";
@@ -41,6 +42,13 @@ function makeFakeLogger(): LoggerPort {
   return { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 }
 
+function makeFakeSessionRepository(): SessionRepositoryPort {
+  return {
+    save: async () => {},
+    load: async () => null,
+  };
+}
+
 function createSession(definition: AgentDefinition, userMessage: string): AgentSession {
   return {
     sessionId: crypto.randomUUID(),
@@ -66,6 +74,7 @@ describe("SingleShotRuntime", () => {
     const runtime = new SingleShotRuntime({
       llmService,
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(singleShotDefinition, "Hello");
@@ -85,6 +94,7 @@ describe("SingleShotRuntime", () => {
     const runtime = new SingleShotRuntime({
       llmService,
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(singleShotDefinition, "Hello");
@@ -102,6 +112,7 @@ describe("SingleShotRuntime", () => {
     const runtime = new SingleShotRuntime({
       llmService,
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(singleShotDefinition, "Hello");
@@ -119,6 +130,7 @@ describe("SingleShotRuntime", () => {
     const runtime = new SingleShotRuntime({
       llmService,
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(singleShotDefinition, "Hello");
@@ -136,6 +148,7 @@ describe("SingleShotRuntime", () => {
     const runtime = new SingleShotRuntime({
       llmService,
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(singleShotDefinition, "Hello");
@@ -157,6 +170,7 @@ describe("SingleShotRuntime", () => {
     const runtime = new SingleShotRuntime({
       llmService,
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const definitionWithModel: AgentDefinition = {
@@ -180,6 +194,7 @@ describe("SingleShotRuntime", () => {
     const runtime = new SingleShotRuntime({
       llmService,
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(singleShotDefinition, "Hello");

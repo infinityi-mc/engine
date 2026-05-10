@@ -1,5 +1,8 @@
 import type { AgentRunResult } from "../types/agent.types";
 
+export { SessionNotFoundError } from "./session-not-found.error";
+export { SessionNotResumableError } from "./session-not-resumable.error";
+
 export class AgentNotFoundError extends Error {
   readonly name = "AgentNotFoundError";
 

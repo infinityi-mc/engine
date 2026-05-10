@@ -1,11 +1,16 @@
 import type { LlmService } from "../../llm/application/llm.service";
 import type { ToolRegistryPort } from "../domain/ports/tool-registry.port";
 import type { AgentDefinitionRepositoryPort } from "../domain/ports/agent-definition-repository.port";
+import type { SessionRepositoryPort } from "../domain/ports/session-repository.port";
 import type { LoggerPort } from "../../../shared/observability/logger.port";
 import type { ConfigPort } from "../../../shared/config/config.port";
 import type { ChatMessage } from "../../llm/domain/ports/llm.types";
 import type { AgentDefinition, AgentRunResult, AgentSession } from "../domain/types/agent.types";
-import { AgentNotFoundError } from "../domain/errors/agent.errors";
+import {
+  AgentNotFoundError,
+  SessionNotFoundError,
+  SessionNotResumableError,
+} from "../domain/errors/agent.errors";
 import { ToolUseLoop } from "./runtime/tool-use-loop";
 import { SingleShotRuntime } from "./runtime/single-shot";
 
@@ -13,6 +18,7 @@ export interface AgentServiceDeps {
   readonly llmService: LlmService;
   readonly toolRegistry: ToolRegistryPort;
   readonly agentDefinitions: AgentDefinitionRepositoryPort;
+  readonly sessionRepository: SessionRepositoryPort;
   readonly config: ConfigPort;
   readonly logger: LoggerPort;
 }
@@ -20,6 +26,7 @@ export interface AgentServiceDeps {
 export interface RunOptions {
   maxIterations?: number;
   timeoutMs?: number;
+  sessionId?: string;
 }
 
 export class AgentService {
@@ -30,11 +37,13 @@ export class AgentService {
     this.toolUseLoop = new ToolUseLoop({
       llmService: deps.llmService,
       toolRegistry: deps.toolRegistry,
+      sessionRepository: deps.sessionRepository,
       logger: deps.logger,
     });
 
     this.singleShot = new SingleShotRuntime({
       llmService: deps.llmService,
+      sessionRepository: deps.sessionRepository,
       logger: deps.logger,
     });
   }
@@ -54,11 +63,19 @@ export class AgentService {
       ?? agentConfig?.defaultTimeoutMs
       ?? 300_000;
 
-    const session = this.createSession(definition, userMessage);
+    let session: AgentSession;
+
+    if (options?.sessionId) {
+      session = await this.resumeSession(options.sessionId, agentId, userMessage);
+    } else {
+      session = this.createSession(definition, userMessage);
+      await this.deps.sessionRepository.save(session);
+    }
 
     this.deps.logger.info("agent.session_created", {
       sessionId: session.sessionId,
       agentId: definition.id,
+      resumed: !!options?.sessionId,
     });
 
     if (definition.runtime === "single-shot") {
@@ -74,6 +91,32 @@ export class AgentService {
 
   async listDefinitions(): Promise<AgentDefinition[]> {
     return this.deps.agentDefinitions.getAll();
+  }
+
+  private async resumeSession(
+    sessionId: string,
+    agentId: string,
+    userMessage: string,
+  ): Promise<AgentSession> {
+    const session = await this.deps.sessionRepository.load(sessionId);
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
+
+    if (session.agentId !== agentId) {
+      throw new SessionNotResumableError(sessionId, session.status);
+    }
+
+    if (session.status !== "completed") {
+      throw new SessionNotResumableError(sessionId, session.status);
+    }
+
+    session.messages.push({ role: "user", content: userMessage });
+    session.status = "active";
+    session.completedAt = null;
+
+    await this.deps.sessionRepository.save(session);
+    return session;
   }
 
   private createSession(definition: AgentDefinition, userMessage: string): AgentSession {

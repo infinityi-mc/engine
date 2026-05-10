@@ -34,6 +34,7 @@ export interface AgentSession {
 }
 
 export interface AgentRunResult {
+  readonly sessionId: string;
   readonly content: string;
   readonly reasoning: string;
   readonly status: SessionStatus;

@@ -77,6 +77,8 @@ import { InMemoryToolRegistry } from "../modules/agent/infrastructure/registry/t
 import { ConfigAgentDefinitionRepository } from "../modules/agent/infrastructure/persistence/agent-definition-repository.adapter";
 import { RunPythonTool } from "../modules/agent/infrastructure/tools/run-python.tool";
 import { AgentService } from "../modules/agent/application/agent.service";
+import { FileSessionRepository } from "../modules/agent/infrastructure/persistence/file-session-repository.adapter";
+import type { SessionRepositoryPort } from "../modules/agent/domain/ports/session-repository.port";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -92,6 +94,7 @@ export interface AppContainer {
   readonly llmService: LlmServiceType;
   readonly agentService: AgentServiceType;
   readonly toolRegistry: ToolRegistryPort;
+  readonly sessionRepository: SessionRepositoryPort;
 }
 
 export function createContainer(): AppContainer {
@@ -261,10 +264,15 @@ export function createContainer(): AppContainer {
   toolRegistry.register(new RunPythonTool(terminal, logger));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, logger);
+  const sessionRepository = new FileSessionRepository({
+    dataDir: path.join(dataDir, "sessions"),
+    logger,
+  });
   const agentService = new AgentService({
     llmService,
     toolRegistry,
     agentDefinitions,
+    sessionRepository,
     config,
     logger,
   });
@@ -283,5 +291,6 @@ export function createContainer(): AppContainer {
     llmService,
     agentService,
     toolRegistry,
+    sessionRepository,
   };
 }

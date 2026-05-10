@@ -1,10 +1,13 @@
 import type { LlmService } from "../../../llm/application/llm.service";
+import type { SessionRepositoryPort } from "../../domain/ports/session-repository.port";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import type { AgentDefinition, AgentRunResult, AgentSession } from "../../domain/types/agent.types";
 import type { ChatMessage } from "../../../llm/domain/ports/llm.types";
+import { saveSession } from "./save-session";
 
 export interface SingleShotDeps {
   readonly llmService: LlmService;
+  readonly sessionRepository: SessionRepositoryPort;
   readonly logger: LoggerPort;
 }
 
@@ -36,6 +39,8 @@ export class SingleShotRuntime {
       session.status = "completed";
       session.completedAt = Date.now();
 
+      await saveSession(this.deps.sessionRepository, session, this.deps.logger);
+
       this.deps.logger.info("agent.session_completed", {
         sessionId: session.sessionId,
         agentId: definition.id,
@@ -45,6 +50,7 @@ export class SingleShotRuntime {
       });
 
       return {
+        sessionId: session.sessionId,
         content: response.content,
         reasoning: response.reasoning,
         status: session.status,
@@ -55,7 +61,11 @@ export class SingleShotRuntime {
     } catch (error) {
       session.status = "failed";
       session.completedAt = Date.now();
+      try {
+        await saveSession(this.deps.sessionRepository, session, this.deps.logger);
+      } catch { /* swallow — don't mask the original error */ }
       throw error;
     }
   }
+
 }

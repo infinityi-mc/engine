@@ -6,6 +6,7 @@ import type { AgentDefinitionRepositoryPort } from "../../src/modules/agent/doma
 import type { LlmService } from "../../src/modules/llm/application/llm.service";
 import type { ConfigPort } from "../../src/shared/config/config.port";
 import type { LoggerPort } from "../../src/shared/observability/logger.port";
+import type { SessionRepositoryPort } from "../../src/modules/agent/domain/ports/session-repository.port";
 import type { CompletionResponse, TokenUsage } from "../../src/modules/llm/domain/ports/llm.types";
 import type { AgentDefinition } from "../../src/modules/agent/domain/types/agent.types";
 
@@ -84,12 +85,20 @@ function makeFakeDefinitionRepository(definitions: AgentDefinition[]): AgentDefi
   };
 }
 
+function makeFakeSessionRepository(): SessionRepositoryPort {
+  return {
+    save: async () => {},
+    load: async () => null,
+  };
+}
+
 describe("AgentService", () => {
   test("throws AgentNotFoundError for unknown agent id", async () => {
     const service = new AgentService({
       llmService: {} as LlmService,
       toolRegistry: makeFakeToolRegistry(),
       agentDefinitions: makeFakeDefinitionRepository([]),
+      sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
     });
@@ -106,6 +115,7 @@ describe("AgentService", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry(),
       agentDefinitions: makeFakeDefinitionRepository([singleShotDefinition]),
+      sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
     });
@@ -127,6 +137,7 @@ describe("AgentService", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry(),
       agentDefinitions: makeFakeDefinitionRepository([testDefinition]),
+      sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
     });
@@ -143,6 +154,7 @@ describe("AgentService", () => {
       llmService: {} as LlmService,
       toolRegistry: makeFakeToolRegistry(),
       agentDefinitions: makeFakeDefinitionRepository([testDefinition]),
+      sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
     });
@@ -156,6 +168,7 @@ describe("AgentService", () => {
       llmService: {} as LlmService,
       toolRegistry: makeFakeToolRegistry(),
       agentDefinitions: makeFakeDefinitionRepository([testDefinition, singleShotDefinition]),
+      sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
     });
@@ -191,6 +204,7 @@ describe("AgentService", () => {
       llmService,
       toolRegistry,
       agentDefinitions: makeFakeDefinitionRepository([testDefinition]),
+      sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
     });

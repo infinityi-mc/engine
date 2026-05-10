@@ -34,6 +34,7 @@ const fakeUsage: TokenUsage = {
 };
 
 const fakeResult: AgentRunResult = {
+  sessionId: "test-session-id",
   content: "Hello!",
   reasoning: "",
   status: "completed",
@@ -141,6 +142,22 @@ describe("agent routes", () => {
     expect(body.error).toBe("InvalidInput");
   });
 
+  test("POST /agent/run returns 400 when sessionId is not a valid UUID", async () => {
+    const { router } = makeRouter({});
+    const token = await makeToken(SCOPES.AGENT_RUN);
+
+    const response = await router.handle(new Request("http://localhost/agent/run", {
+      method: "POST",
+      body: JSON.stringify({ agentId: "test-agent", message: "Hello", sessionId: "../../etc/evil" }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    }));
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as Record<string, unknown>;
+    expect(body.error).toBe("InvalidInput");
+    expect(body.field).toBe("sessionId");
+  });
+
   test("POST /agent/run returns 404 for AgentNotFoundError", async () => {
     const { router } = makeRouter({
       run: async () => { throw new AgentNotFoundError("missing-agent"); },
@@ -163,6 +180,7 @@ describe("agent routes", () => {
     const { router } = makeRouter({
       run: async () => {
         throw new MaxIterationsReachedError(5, {
+          sessionId: "test-session-id",
           content: "partial",
           reasoning: "thinking",
           status: "active",
@@ -192,6 +210,7 @@ describe("agent routes", () => {
     const { router } = makeRouter({
       run: async () => {
         throw new SessionTimeoutError(60_000, {
+          sessionId: "test-session-id",
           content: "partial",
           reasoning: "",
           status: "active",

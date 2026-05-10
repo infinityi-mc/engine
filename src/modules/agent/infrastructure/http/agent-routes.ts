@@ -5,8 +5,13 @@ import type { Router } from "../../../../shared/http/router";
 import { parseJson, requiredString } from "../../../../shared/http/route-helpers";
 import { SCOPES } from "./scopes";
 import type { AgentService } from "../../application/agent.service";
-import { AgentNotFoundError } from "../../domain/errors/agent.errors";
-import { MaxIterationsReachedError, SessionTimeoutError } from "../../domain/errors/agent.errors";
+import {
+  AgentNotFoundError,
+  SessionNotFoundError,
+  SessionNotResumableError,
+  MaxIterationsReachedError,
+  SessionTimeoutError,
+} from "../../domain/errors/agent.errors";
 import {
   ProviderApiError,
   ProviderAuthError,
@@ -15,6 +20,7 @@ import {
   ProviderTimeoutError,
 } from "../../../llm/domain/errors/llm.errors";
 import type { AgentDefinition } from "../../domain/types/agent.types";
+import { isValidUUID } from "../../../../shared/validation/uuid";
 
 export function registerAgentRoutes(
   router: Router,
@@ -44,7 +50,7 @@ export function registerAgentRoutes(
     }
 
     return handleErrors(async () => {
-      const options: { maxIterations?: number; timeoutMs?: number } = {};
+      const options: { maxIterations?: number; timeoutMs?: number; sessionId?: string } = {};
 
       if (typeof body.maxIterations === "number") {
         if (!Number.isFinite(body.maxIterations) || body.maxIterations < 1) {
@@ -58,10 +64,17 @@ export function registerAgentRoutes(
         }
         options.timeoutMs = body.timeoutMs;
       }
+      if (typeof body.sessionId === "string" && body.sessionId.length > 0) {
+        if (!isValidUUID(body.sessionId)) {
+          return jsonResponse({ error: "InvalidInput", field: "sessionId", message: "sessionId must be a valid UUID" }, { status: 400 });
+        }
+        options.sessionId = body.sessionId;
+      }
 
       const result = await agentService.run(agentId.value, message.value, options);
 
       return jsonResponse({
+        sessionId: result.sessionId,
         content: result.content,
         reasoning: result.reasoning,
         status: result.status,
@@ -116,8 +129,17 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
       return jsonResponse({ error: "AgentNotFound", agentId: error.agentId, message: error.message }, { status: 404 });
     }
 
+    if (error instanceof SessionNotFoundError) {
+      return jsonResponse({ error: "SessionNotFound", sessionId: error.sessionId, message: error.message }, { status: 404 });
+    }
+
+    if (error instanceof SessionNotResumableError) {
+      return jsonResponse({ error: "SessionNotResumable", sessionId: error.sessionId, status: error.currentStatus, message: error.message }, { status: 409 });
+    }
+
     if (error instanceof MaxIterationsReachedError) {
       return jsonResponse({
+        sessionId: error.partialResult.sessionId,
         content: error.partialResult.content,
         reasoning: error.partialResult.reasoning,
         status: error.partialResult.status,
@@ -130,6 +152,7 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
 
     if (error instanceof SessionTimeoutError) {
       return jsonResponse({
+        sessionId: error.partialResult.sessionId,
         content: error.partialResult.content,
         reasoning: error.partialResult.reasoning,
         status: error.partialResult.status,

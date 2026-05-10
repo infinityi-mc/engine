@@ -3,6 +3,7 @@ import { ToolUseLoop } from "../../src/modules/agent/application/runtime/tool-us
 import { MaxIterationsReachedError, SessionTimeoutError } from "../../src/modules/agent/domain/errors/agent.errors";
 import type { LlmService } from "../../src/modules/llm/application/llm.service";
 import type { ToolRegistryPort } from "../../src/modules/agent/domain/ports/tool-registry.port";
+import type { SessionRepositoryPort } from "../../src/modules/agent/domain/ports/session-repository.port";
 import type { LoggerPort } from "../../src/shared/observability/logger.port";
 import type { CompletionResponse, TokenUsage, ToolCall } from "../../src/modules/llm/domain/ports/llm.types";
 import type { AgentDefinition, AgentSession } from "../../src/modules/agent/domain/types/agent.types";
@@ -50,6 +51,13 @@ function makeFakeLogger(): LoggerPort {
   return { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 }
 
+function makeFakeSessionRepository(): SessionRepositoryPort {
+  return {
+    save: async () => {},
+    load: async () => null,
+  };
+}
+
 function makeFakeToolRegistry(tools: Tool[] = []): ToolRegistryPort {
   const map = new Map(tools.map((t) => [t.name, t]));
   return {
@@ -90,6 +98,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry(),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Hello");
@@ -127,6 +136,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Read /test.txt");
@@ -176,6 +186,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Read both files");
@@ -215,6 +226,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Read /test.txt");
@@ -247,6 +259,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Do something");
@@ -285,6 +298,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Read a file");
@@ -317,6 +331,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Keep reading");
@@ -356,6 +371,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Keep reading");
@@ -375,6 +391,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry(),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Hello");
@@ -394,6 +411,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry(),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Hello");
@@ -413,6 +431,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry(),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Hello");
@@ -457,6 +476,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool, writeTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Read and write");
@@ -503,6 +523,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry([readTool]),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Read and answer");
@@ -523,6 +544,7 @@ describe("ToolUseLoop", () => {
       llmService,
       toolRegistry: makeFakeToolRegistry(),
       logger: makeFakeLogger(),
+      sessionRepository: makeFakeSessionRepository(),
     });
 
     const session = createSession(testDefinition, "Write a lot");
