@@ -24,14 +24,12 @@ export class RunPythonTool implements Tool {
   };
 
   private pythonPath: string | null = null;
-  private detectPromise: Promise<void>;
+  private detectPromise: Promise<void> | null = null;
 
   constructor(
     private readonly terminal: TerminalPort,
     private readonly logger: LoggerPort,
-  ) {
-    this.detectPromise = this.detectPython();
-  }
+  ) {}
 
   async execute(input: unknown): Promise<ToolResult> {
     const parsed = validateInput(input);
@@ -40,6 +38,10 @@ export class RunPythonTool implements Tool {
     }
 
     const { code, timeoutMs } = parsed.value;
+
+    if (!this.detectPromise) {
+      this.detectPromise = this.detectPython();
+    }
 
     try {
       await this.detectPromise;
