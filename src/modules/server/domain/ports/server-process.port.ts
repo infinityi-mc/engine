@@ -12,6 +12,5 @@ export interface SpawnInput {
 export interface ServerProcessPort {
   spawn(input: SpawnInput): Promise<ServerInstance>;
   kill(instanceId: string): Promise<void>;
-  isAlive(instanceId: string): Promise<boolean>;
   reconcile(registry: ServerRegistryPort): Promise<void>;
 }

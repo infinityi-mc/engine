@@ -10,6 +10,7 @@ import { registerServerRoutes } from "../../src/modules/server/infrastructure/ht
 import { SCOPES } from "../../src/modules/server/infrastructure/http/scopes";
 import { BunServerProcessAdapter } from "../../src/modules/server/infrastructure/process/bun-server-process.adapter";
 import { InMemoryServerRegistryAdapter } from "../../src/modules/server/infrastructure/registry/in-memory-server-registry.adapter";
+import { EventBus } from "../../src/shared/application/event-bus";
 import { SpawnServerHandler } from "../../src/modules/server/application/commands/spawn-server.handler";
 import { KillServerHandler } from "../../src/modules/server/application/commands/kill-server.handler";
 import { ListServersHandler } from "../../src/modules/server/application/queries/list-servers.handler";
@@ -37,12 +38,12 @@ describe("server module", () => {
 
   beforeEach(async () => {
     pidDir = await mkdtemp(path.join(os.tmpdir(), "server-module-pids-"));
-    serverProcess = new BunServerProcessAdapter(noopLogger, pidDir);
+    serverProcess = new BunServerProcessAdapter(noopLogger, pidDir, new EventBus());
     serverRegistry = new InMemoryServerRegistryAdapter();
     spawnHandler = new SpawnServerHandler(serverProcess, serverRegistry);
     killHandler = new KillServerHandler(serverProcess, serverRegistry);
     listHandler = new ListServersHandler(serverRegistry);
-    statusHandler = new GetServerStatusHandler(serverRegistry, serverProcess);
+    statusHandler = new GetServerStatusHandler(serverRegistry);
   });
 
   afterEach(async () => {
@@ -194,7 +195,7 @@ describe("server module", () => {
     await writeFile(path.join(pidDir, "reconcile-test.pid"), String(pid), "utf8");
 
     // Create a fresh adapter and registry (simulating app restart)
-    const freshProcess = new BunServerProcessAdapter(noopLogger, pidDir);
+    const freshProcess = new BunServerProcessAdapter(noopLogger, pidDir, new EventBus());
     const freshRegistry = new InMemoryServerRegistryAdapter();
 
     await freshProcess.reconcile(freshRegistry);
@@ -216,7 +217,7 @@ describe("server module", () => {
     const stalePidFile = path.join(pidDir, "stale-test.pid");
     await writeFile(stalePidFile, "999999999", "utf8"); // Very unlikely to be a real PID
 
-    const freshProcess = new BunServerProcessAdapter(noopLogger, pidDir);
+    const freshProcess = new BunServerProcessAdapter(noopLogger, pidDir, new EventBus());
     const freshRegistry = new InMemoryServerRegistryAdapter();
 
     await freshProcess.reconcile(freshRegistry);

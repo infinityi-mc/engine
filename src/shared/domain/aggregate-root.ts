@@ -2,7 +2,8 @@ import type { DomainEvent } from "./domain-event";
 
 /**
  * Base class for domain aggregates in Event-Driven Architecture.
- * Kept for future EDA implementation - currently not wired into the system.
+ * Subclasses call record() to enqueue domain events, then infrastructure
+ * drains them via pullDomainEvents() after persistence.
  */
 export abstract class AggregateRoot {
   private readonly domainEvents: DomainEvent[] = [];

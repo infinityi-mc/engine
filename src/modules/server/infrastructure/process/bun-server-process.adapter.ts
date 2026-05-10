@@ -2,11 +2,13 @@ import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import { getErrorMessage, getErrorName } from "../../../../shared/observability/error-utils";
+import type { EventBus } from "../../../../shared/application/event-bus";
 import type { ServerProcessPort, SpawnInput } from "../../domain/ports/server-process.port";
 import type { ServerRegistryPort } from "../../domain/ports/server-registry.port";
 import type { ServerInstance, ServerStatus } from "../../domain/types/server-instance";
 import { ServerNotFoundError } from "../../domain/errors/server-not-found.error";
 import { ServerProcessError } from "../../domain/errors/server-process.error";
+import { ServerProcessExited } from "../../domain/events/server-process-exited.event";
 
 interface TrackedProcess {
   readonly subprocess: ReturnType<typeof Bun.spawn>;
@@ -21,6 +23,7 @@ export class BunServerProcessAdapter implements ServerProcessPort {
   constructor(
     private readonly logger: LoggerPort,
     private readonly pidDir: string,
+    private readonly eventBus: EventBus,
   ) {}
 
   async spawn(input: SpawnInput): Promise<ServerInstance> {
@@ -130,17 +133,7 @@ export class BunServerProcessAdapter implements ServerProcessPort {
 
       await this.removePidFile(instanceId);
 
-      const instance = this.instances.get(instanceId);
-      if (instance) {
-        this.instances.set(instanceId, {
-          ...instance,
-          status: "stopped",
-          stoppedAt: new Date(),
-        });
-      }
-
       this.processes.delete(instanceId);
-      this.killedInstanceIds.delete(instanceId);
 
       this.logger.info("server.process.killed", {
         module: "server",
@@ -149,6 +142,8 @@ export class BunServerProcessAdapter implements ServerProcessPort {
         pid: subprocess.pid,
       });
     } catch (error) {
+      this.killedInstanceIds.delete(instanceId);
+
       this.logger.error("server.process.kill_error", {
         module: "server",
         operation: "process.kill",
@@ -158,21 +153,6 @@ export class BunServerProcessAdapter implements ServerProcessPort {
       });
 
       throw new ServerProcessError(instanceId, getErrorMessage(error));
-    }
-  }
-
-  async isAlive(instanceId: string): Promise<boolean> {
-    const tracked = this.processes.get(instanceId);
-    if (!tracked) {
-      return false;
-    }
-
-    try {
-      // Signal 0 checks if process exists without sending a signal
-      process.kill(tracked.subprocess.pid, 0);
-      return true;
-    } catch {
-      return false;
     }
   }
 
@@ -276,10 +256,10 @@ export class BunServerProcessAdapter implements ServerProcessPort {
   private monitorExit(instanceId: string, subprocess: ReturnType<typeof Bun.spawn>): void {
     subprocess.exited.then((exitCode) => {
       const instance = this.instances.get(instanceId);
+      const wasKilled = this.killedInstanceIds.has(instanceId);
       if (instance) {
         // If kill() was called, classify as "stopped" regardless of exit code
         // (e.g., SIGTERM produces exit code 143 on Linux, which is intentional)
-        const wasKilled = this.killedInstanceIds.has(instanceId);
         const status: ServerStatus = wasKilled || exitCode === 0 ? "stopped" : "crashed";
         this.instances.set(instanceId, {
           ...instance,
@@ -294,6 +274,17 @@ export class BunServerProcessAdapter implements ServerProcessPort {
         this.logger.debug("server.process.pid_cleanup_failed", {
           module: "server",
           operation: "process.pid_cleanup",
+          instanceId,
+          error: String(e),
+        });
+      });
+
+      this.eventBus.publish(
+        new ServerProcessExited(instanceId, exitCode, wasKilled),
+      ).catch((e) => {
+        this.logger.error("server.process.event_publish_failed", {
+          module: "server",
+          operation: "process.exit",
           instanceId,
           error: String(e),
         });

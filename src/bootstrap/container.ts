@@ -1,5 +1,6 @@
 import path from "node:path";
 import { CommandBus } from "../shared/application/command-bus";
+import { EventBus } from "../shared/application/event-bus";
 import { QueryBus } from "../shared/application/query-bus";
 import { ConfigAdapter } from "../shared/config/config.adapter";
 import type { ConfigPort } from "../shared/config/config.port";
@@ -38,6 +39,8 @@ import { GET_SERVER_STATUS_QUERY } from "../modules/server/application/queries/g
 import { GetServerStatusHandler } from "../modules/server/application/queries/get-server-status.handler";
 import { BunServerProcessAdapter } from "../modules/server/infrastructure/process/bun-server-process.adapter";
 import { InMemoryServerRegistryAdapter } from "../modules/server/infrastructure/registry/in-memory-server-registry.adapter";
+import { SERVER_PROCESS_EXITED } from "../modules/server/domain/events/server-process-exited.event";
+import { ServerRegistryStatusSyncHandler } from "../modules/server/application/events/server-registry-status-sync.handler";
 
 import type { ServerProcessPort } from "../modules/server/domain/ports/server-process.port";
 import type { ServerRegistryPort } from "../modules/server/domain/ports/server-registry.port";
@@ -82,6 +85,7 @@ import type { SessionRepositoryPort } from "../modules/agent/domain/ports/sessio
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
+  readonly eventBus: EventBus;
   readonly queryBus: QueryBus;
   readonly guard: JwtGuard;
   readonly logger: LoggerPort;
@@ -99,6 +103,7 @@ export interface AppContainer {
 
 export function createContainer(): AppContainer {
   const commandBus = new CommandBus();
+  const eventBus = new EventBus();
   const queryBus = new QueryBus();
   const logger = new ConsoleLoggerAdapter();
 
@@ -141,8 +146,10 @@ export function createContainer(): AppContainer {
 
   // Server module
   const pidDir = Bun.env.PID_DIR ?? path.join(process.cwd(), "data/pids");
-  const serverProcess = new BunServerProcessAdapter(logger, pidDir);
+  const serverProcess = new BunServerProcessAdapter(logger, pidDir, eventBus);
   const serverRegistry = new InMemoryServerRegistryAdapter();
+
+  eventBus.subscribe(SERVER_PROCESS_EXITED, new ServerRegistryStatusSyncHandler(serverRegistry, logger));
 
   commandBus.register(
     SPAWN_SERVER_COMMAND,
@@ -156,7 +163,7 @@ export function createContainer(): AppContainer {
   queryBus.register(LIST_SERVERS_QUERY, new ListServersHandler(serverRegistry));
   queryBus.register(
     GET_SERVER_STATUS_QUERY,
-    new GetServerStatusHandler(serverRegistry, serverProcess),
+    new GetServerStatusHandler(serverRegistry),
   );
 
   // Minecraft module
@@ -279,6 +286,7 @@ export function createContainer(): AppContainer {
 
   return {
     commandBus,
+    eventBus,
     queryBus,
     guard,
     logger,

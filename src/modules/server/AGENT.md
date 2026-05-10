@@ -58,11 +58,10 @@ Server process management is split across two ports:
 
 ### ServerProcessPort
 
-Owns the subprocess lifecycle — spawn, kill, isAlive, reconcile. Implemented by `BunServerProcessAdapter` which holds `Bun.spawn` subprocess references and PID file state.
+Owns the subprocess lifecycle — spawn, kill, reconcile. Implemented by `BunServerProcessAdapter` which holds `Bun.spawn` subprocess references and PID file state.
 
 - `spawn(input: SpawnInput): Promise<ServerInstance>` — spawns a long-running process, writes PID file, begins exit monitoring
 - `kill(instanceId: string): Promise<void>` — terminates the process (SIGTERM→SIGKILL on Unix, taskkill on Windows), removes PID file
-- `isAlive(instanceId: string): Promise<boolean>` — checks if the tracked subprocess is still running via signal-0 probe
 - `reconcile(registry: ServerRegistryPort): Promise<void>` — scans PID directory on startup, adopts running processes, removes stale PID files
 
 ### ServerRegistryPort
@@ -101,11 +100,9 @@ The `env` field is intentionally **not** stored on `ServerInstance` to prevent c
 | Command | `server.instance.spawn` | `SpawnServerHandler` | `ServerProcessPort`, `ServerRegistryPort` |
 | Command | `server.instance.kill` | `KillServerHandler` | `ServerProcessPort`, `ServerRegistryPort` |
 | Query | `server.instance.list` | `ListServersHandler` | `ServerRegistryPort` |
-| Query | `server.instance.status` | `GetServerStatusHandler` | `ServerRegistryPort`, `ServerProcessPort` |
+| Query | `server.instance.status` | `GetServerStatusHandler` | `ServerRegistryPort` |
 
 `SpawnServerCommand` returns `ServerInstance` rather than `void`. This project uses CQRS to separate command intent from query intent, but it does not enforce a strict "commands must return void" rule. Returning the created instance from spawn is intentional API behavior — callers need the PID and status immediately.
-
-`GetServerStatusHandler` checks liveness before returning status. If the registry says `running` but the process is dead, the handler updates the registry status to `crashed` and returns the corrected state. This is intentional staleness correction, not a side effect in a query handler.
 
 ## Orphan Prevention (PID File + Reconcile)
 
@@ -142,7 +139,6 @@ Process management uses `Bun.spawn` directly:
 - **Spawn**: `Bun.spawn([command, ...args], { stdin: "pipe", stdout: "pipe", stderr: "pipe" })`. Pipes are held open for future consumer module use (stdin interaction, log streaming) but are not exposed by this module's ports.
 - **Kill (Unix)**: SIGTERM first, then SIGKILL after 5-second timeout. This gives processes a chance to shut down gracefully.
 - **Kill (Windows)**: `taskkill /PID <pid> /T /F` to kill the process tree. Windows has no SIGTERM equivalent; forced termination is the only reliable option.
-- **isAlive**: Uses `process.kill(pid, 0)` (signal-0 probe) which works on both Unix and Windows.
 - **Env merge**: When `SpawnInput.env` is provided, it is merged on top of the host process environment. This preserves `PATH` resolution while allowing callers to override or add variables.
 
 HTTP JSON request bodies for server routes are limited to 1 MiB.
@@ -213,9 +209,6 @@ When reviewing this module, focus on:
 - Cross-platform kill behavior (SIGTERM/SIGKILL on Unix, taskkill on Windows)
 - Safe metadata-only observability logs
 - JWT guard applied to every server route with correct scope
-- Scope constants match endpoint risk level (read vs write)
-- Status staleness correction in `GetServerStatusHandler`
-- No stdin/log APIs exposed at the core level (deferred to consumers)
 
 Do not require this module's domain/application layers to validate whether a command is safe, whether a process should be allowed, or whether resource limits should be enforced. Those checks belong in the caller or a dedicated policy layer. API verification (JWT + scopes) is the infrastructure layer's responsibility and is already enforced at the route level.
 

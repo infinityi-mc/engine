@@ -2,7 +2,7 @@ import type { DomainEvent } from "../domain/domain-event";
 
 /**
  * Event bus for Event-Driven Architecture.
- * Kept for future EDA implementation - currently not instantiated or used.
+ * Publishes domain events to registered handlers.
  */
 export interface EventHandler<TEvent extends DomainEvent> {
   handle(event: TEvent): Promise<void> | void;

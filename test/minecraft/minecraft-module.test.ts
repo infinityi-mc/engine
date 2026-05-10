@@ -10,6 +10,7 @@ import { SCOPES } from "../../src/modules/minecraft/infrastructure/http/scopes";
 import { JsonMinecraftServerRepositoryAdapter } from "../../src/modules/minecraft/infrastructure/persistence/json-minecraft-server-repository.adapter";
 import { BunServerProcessAdapter } from "../../src/modules/server/infrastructure/process/bun-server-process.adapter";
 import { InMemoryServerRegistryAdapter } from "../../src/modules/server/infrastructure/registry/in-memory-server-registry.adapter";
+import { EventBus } from "../../src/shared/application/event-bus";
 import { BunMinecraftStdinAdapter } from "../../src/modules/minecraft/infrastructure/process/bun-minecraft-stdin.adapter";
 import { BunMinecraftLogAdapter } from "../../src/modules/minecraft/infrastructure/process/bun-minecraft-log.adapter";
 import { waitForProcessExit } from "../../src/modules/minecraft/infrastructure/process/wait-for-exit";
@@ -76,7 +77,7 @@ describe("minecraft module", () => {
   beforeEach(async () => {
     pidDir = await mkdtemp(path.join(os.tmpdir(), "minecraft-module-pids-"));
     dataDir = await mkdtemp(path.join(os.tmpdir(), "minecraft-module-data-"));
-    serverProcess = new BunServerProcessAdapter(noopLogger, pidDir);
+    serverProcess = new BunServerProcessAdapter(noopLogger, pidDir, new EventBus());
     serverRegistry = new InMemoryServerRegistryAdapter();
     minecraftRepository = new JsonMinecraftServerRepositoryAdapter(noopLogger, dataDir);
     minecraftStdin = new BunMinecraftStdinAdapter(serverProcess);
@@ -315,7 +316,7 @@ describe("minecraft module", () => {
   test("minecraft routes return correct JSON for create and list", async () => {
     const pidDir2 = await mkdtemp(path.join(os.tmpdir(), "minecraft-http-pids-"));
     const dataDir2 = await mkdtemp(path.join(os.tmpdir(), "minecraft-http-data-"));
-    const sp = new BunServerProcessAdapter(noopLogger, pidDir2);
+    const sp = new BunServerProcessAdapter(noopLogger, pidDir2, new EventBus());
     const sr = new InMemoryServerRegistryAdapter();
     const mr = new JsonMinecraftServerRepositoryAdapter(noopLogger, dataDir2);
     const ms = new BunMinecraftStdinAdapter(sp);
@@ -353,7 +354,7 @@ describe("minecraft module", () => {
     commandBus.register(SEND_MINECRAFT_COMMAND_COMMAND, new SendMinecraftCommandHandler(mr, sr, ms));
 
     queryBus.register(LIST_SERVERS_QUERY, new ListServersHandler(sr));
-    queryBus.register(GET_SERVER_STATUS_QUERY, new GetServerStatusHandler(sr, sp));
+    queryBus.register(GET_SERVER_STATUS_QUERY, new GetServerStatusHandler(sr));
     queryBus.register(LIST_MINECRAFT_SERVERS_QUERY, new ListMinecraftServersHandler(mr));
     queryBus.register(GET_MINECRAFT_SERVER_QUERY, new GetMinecraftServerHandler(mr, sr));
     queryBus.register(STREAM_MINECRAFT_LOGS_QUERY, new StreamMinecraftLogsHandler(mr, sr, ml));
@@ -491,7 +492,7 @@ describe("minecraft module", () => {
   test("minecraft routes return 404 for unknown server", async () => {
     const pidDir2 = await mkdtemp(path.join(os.tmpdir(), "minecraft-404-pids-"));
     const dataDir2 = await mkdtemp(path.join(os.tmpdir(), "minecraft-404-data-"));
-    const sp = new BunServerProcessAdapter(noopLogger, pidDir2);
+    const sp = new BunServerProcessAdapter(noopLogger, pidDir2, new EventBus());
     const sr = new InMemoryServerRegistryAdapter();
     const mr = new JsonMinecraftServerRepositoryAdapter(noopLogger, dataDir2);
 
@@ -532,7 +533,7 @@ describe("minecraft module", () => {
     commandBus.register(SEND_MINECRAFT_COMMAND_COMMAND, new SendMinecraftCommandHandler(mr, sr, ms));
 
     queryBus.register(LIST_SERVERS_QUERY, new ListServersHandler(sr));
-    queryBus.register(GET_SERVER_STATUS_QUERY, new GetServerStatusHandler(sr, sp));
+    queryBus.register(GET_SERVER_STATUS_QUERY, new GetServerStatusHandler(sr));
     queryBus.register(LIST_MINECRAFT_SERVERS_QUERY, new ListMinecraftServersHandler(mr));
     queryBus.register(GET_MINECRAFT_SERVER_QUERY, new GetMinecraftServerHandler(mr, sr));
     queryBus.register(STREAM_MINECRAFT_LOGS_QUERY, new StreamMinecraftLogsHandler(mr, sr, ml));
