@@ -4,6 +4,7 @@ import type { ServerRegistryPort } from "../../../server/domain/ports/server-reg
 import type { MinecraftServerRepositoryPort } from "../../domain/ports/minecraft-server-repository.port";
 import type { ServerInstance } from "../../../server/domain/types/server-instance";
 import type { StartMinecraftServerCommand } from "./start-minecraft-server.command";
+import type { LogListenerPort } from "../../domain/ports/log-listener.port";
 import { MinecraftServerNotFoundError } from "../../domain/errors/minecraft-server-not-found.error";
 import { ServerAlreadyExistsError } from "../../../server/domain/errors/server-already-exists.error";
 
@@ -12,6 +13,7 @@ export class StartMinecraftServerHandler implements CommandHandler<StartMinecraf
     private readonly repository: MinecraftServerRepositoryPort,
     private readonly serverProcess: ServerProcessPort,
     private readonly serverRegistry: ServerRegistryPort,
+    private readonly logListener: LogListenerPort,
   ) {}
 
   async handle(command: StartMinecraftServerCommand): Promise<ServerInstance> {
@@ -33,6 +35,8 @@ export class StartMinecraftServerHandler implements CommandHandler<StartMinecraf
     });
 
     await this.serverRegistry.register(instance);
+
+    this.logListener.startListening(server.id);
 
     return instance;
   }

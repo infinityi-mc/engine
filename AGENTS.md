@@ -79,7 +79,7 @@ All system and server routes are JWT-protected via `JwtGuard.protect(handler, sc
 
 ### EventBus and AggregateRoot
 
-Present in `src/shared/` but not yet wired into the system. Reserved for future event-driven features.
+`EventBus` (`src/shared/application/event-bus.ts`) is wired into the system. `MinecraftLogListener` publishes `MinecraftLogPatternMatched` events through it. `AggregateRoot` (`src/shared/domain/aggregate-root.ts`) is present but unused — reserved for future event-driven features.
 
 ### Persistence
 - Persistent data (files, databases) must be stored inside `data/`.

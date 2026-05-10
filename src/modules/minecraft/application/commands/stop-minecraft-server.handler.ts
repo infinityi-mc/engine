@@ -4,6 +4,7 @@ import type { ServerRegistryPort } from "../../../server/domain/ports/server-reg
 import type { MinecraftServerRepositoryPort } from "../../domain/ports/minecraft-server-repository.port";
 import type { MinecraftStdinPort } from "../../domain/ports/minecraft-stdin.port";
 import type { StopMinecraftServerCommand } from "./stop-minecraft-server.command";
+import type { LogListenerPort } from "../../domain/ports/log-listener.port";
 import { MinecraftServerNotFoundError } from "../../domain/errors/minecraft-server-not-found.error";
 import { MinecraftServerNotRunningError } from "../../domain/errors/minecraft-server-not-running.error";
 import { ServerNotFoundError } from "../../../server/domain/errors/server-not-found.error";
@@ -16,6 +17,7 @@ export class StopMinecraftServerHandler implements CommandHandler<StopMinecraftS
     private readonly serverRegistry: ServerRegistryPort,
     private readonly stdin: MinecraftStdinPort,
     private readonly waitForExit: (instanceId: string, timeoutMs: number) => Promise<boolean>,
+    private readonly logListener: LogListenerPort,
   ) {}
 
   async handle(command: StopMinecraftServerCommand): Promise<void> {
@@ -48,6 +50,7 @@ export class StopMinecraftServerHandler implements CommandHandler<StopMinecraftS
         await this.serverProcess.kill(command.serverId);
       }
     } finally {
+      this.logListener.stopListening(command.serverId);
       await this.serverRegistry.unregister(command.serverId);
     }
   }

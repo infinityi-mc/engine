@@ -24,6 +24,6 @@ export class StreamMinecraftLogsHandler implements QueryHandler<StreamMinecraftL
       throw new MinecraftServerNotRunningError(query.serverId);
     }
 
-    return this.logPort.streamLogs(query.serverId);
+    return this.logPort.createSSEStream(query.serverId);
   }
 }

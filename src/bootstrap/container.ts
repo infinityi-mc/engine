@@ -64,6 +64,8 @@ import { JsonMinecraftServerRepositoryAdapter } from "../modules/minecraft/infra
 import { BunMinecraftStdinAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-stdin.adapter";
 import { BunMinecraftLogAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-log.adapter";
 import { waitForProcessExit } from "../modules/minecraft/infrastructure/process/wait-for-exit";
+import { InMemoryPatternRegistryAdapter } from "../modules/minecraft/infrastructure/registry/in-memory-pattern-registry.adapter";
+import { MinecraftLogListener } from "../modules/minecraft/infrastructure/listeners/minecraft-log.listener";
 
 import type { MinecraftServerRepositoryPort } from "../modules/minecraft/domain/ports/minecraft-server-repository.port";
 import type { MinecraftStdinPort } from "../modules/minecraft/domain/ports/minecraft-stdin.port";
@@ -174,8 +176,12 @@ export function createContainer(): AppContainer {
     dataDir,
   );
   const minecraftStdin = new BunMinecraftStdinAdapter(serverProcess);
-  const minecraftLog = new BunMinecraftLogAdapter(serverProcess);
+  const minecraftLog = new BunMinecraftLogAdapter(serverProcess, logger);
   const minecraftWaitForExit = waitForProcessExit(serverProcess);
+  const patternRegistry = new InMemoryPatternRegistryAdapter();
+  const minecraftLogListener = new MinecraftLogListener(minecraftLog, patternRegistry, eventBus, logger);
+
+  patternRegistry.register("@ai", { action: "invoke_agent", payload: { agentName: "default" } });
 
   commandBus.register(
     CREATE_MINECRAFT_SERVER_COMMAND,
@@ -187,6 +193,7 @@ export function createContainer(): AppContainer {
       minecraftRepository,
       serverProcess,
       serverRegistry,
+      minecraftLogListener,
     ),
   );
   commandBus.register(
@@ -197,6 +204,7 @@ export function createContainer(): AppContainer {
       serverRegistry,
       minecraftStdin,
       minecraftWaitForExit,
+      minecraftLogListener,
     ),
   );
   commandBus.register(

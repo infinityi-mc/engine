@@ -14,6 +14,8 @@ import { EventBus } from "../../src/shared/application/event-bus";
 import { BunMinecraftStdinAdapter } from "../../src/modules/minecraft/infrastructure/process/bun-minecraft-stdin.adapter";
 import { BunMinecraftLogAdapter } from "../../src/modules/minecraft/infrastructure/process/bun-minecraft-log.adapter";
 import { waitForProcessExit } from "../../src/modules/minecraft/infrastructure/process/wait-for-exit";
+import { InMemoryPatternRegistryAdapter } from "../../src/modules/minecraft/infrastructure/registry/in-memory-pattern-registry.adapter";
+import { MinecraftLogListener } from "../../src/modules/minecraft/infrastructure/listeners/minecraft-log.listener";
 import { CommandBus } from "../../src/shared/application/command-bus";
 import { CreateMinecraftServerHandler } from "../../src/modules/minecraft/application/commands/create-minecraft-server.handler";
 import { StartMinecraftServerHandler } from "../../src/modules/minecraft/application/commands/start-minecraft-server.handler";
@@ -81,17 +83,19 @@ describe("minecraft module", () => {
     serverRegistry = new InMemoryServerRegistryAdapter();
     minecraftRepository = new JsonMinecraftServerRepositoryAdapter(noopLogger, dataDir);
     minecraftStdin = new BunMinecraftStdinAdapter(serverProcess);
-    minecraftLog = new BunMinecraftLogAdapter(serverProcess);
+    minecraftLog = new BunMinecraftLogAdapter(serverProcess, noopLogger);
     const minecraftWaitForExit = waitForProcessExit(serverProcess);
+    const noopPatternRegistry = new InMemoryPatternRegistryAdapter();
+    const noopLogListener = new MinecraftLogListener(minecraftLog, noopPatternRegistry, new EventBus(), noopLogger);
     // Use a short timeout for tests since test processes don't respond to /stop
     const testWaitForExit = (instanceId: string, _timeoutMs: number) =>
       minecraftWaitForExit(instanceId, 500);
     const testCommandBus = new CommandBus();
     const STOP_MINECRAFT_SERVER_COMMAND = "minecraft.server.stop";
-    testCommandBus.register(STOP_MINECRAFT_SERVER_COMMAND, new StopMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry, minecraftStdin, testWaitForExit));
+    testCommandBus.register(STOP_MINECRAFT_SERVER_COMMAND, new StopMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry, minecraftStdin, testWaitForExit, noopLogListener));
     createHandler = new CreateMinecraftServerHandler(minecraftRepository);
-    startHandler = new StartMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry);
-    stopHandler = new StopMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry, minecraftStdin, testWaitForExit);
+    startHandler = new StartMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry, noopLogListener);
+    stopHandler = new StopMinecraftServerHandler(minecraftRepository, serverProcess, serverRegistry, minecraftStdin, testWaitForExit, noopLogListener);
     deleteHandler = new DeleteMinecraftServerHandler(minecraftRepository, testCommandBus);
     sendCommandHandler = new SendMinecraftCommandHandler(minecraftRepository, serverRegistry, minecraftStdin);
     listHandler = new ListMinecraftServersHandler(minecraftRepository);
@@ -320,7 +324,9 @@ describe("minecraft module", () => {
     const sr = new InMemoryServerRegistryAdapter();
     const mr = new JsonMinecraftServerRepositoryAdapter(noopLogger, dataDir2);
     const ms = new BunMinecraftStdinAdapter(sp);
-    const ml = new BunMinecraftLogAdapter(sp);
+    const ml = new BunMinecraftLogAdapter(sp, noopLogger);
+    const noopPr = new InMemoryPatternRegistryAdapter();
+    const noopLl = new MinecraftLogListener(ml, noopPr, new EventBus(), noopLogger);
 
     const { CommandBus } = await import("../../src/shared/application/command-bus");
     const { QueryBus } = await import("../../src/shared/application/query-bus");
@@ -348,8 +354,8 @@ describe("minecraft module", () => {
     commandBus.register(SPAWN_SERVER_COMMAND, new SpawnServerHandler(sp, sr));
     commandBus.register(KILL_SERVER_COMMAND, new KillServerHandler(sp, sr));
     commandBus.register(CREATE_MINECRAFT_SERVER_COMMAND, new CreateMinecraftServerHandler(mr));
-    commandBus.register(START_MINECRAFT_SERVER_COMMAND, new StartMinecraftServerHandler(mr, sp, sr));
-    commandBus.register(STOP_MINECRAFT_SERVER_COMMAND, new StopMinecraftServerHandler(mr, sp, sr, ms, ((id: string, _ms: number) => waitForProcessExit(sp)(id, 500))));
+    commandBus.register(START_MINECRAFT_SERVER_COMMAND, new StartMinecraftServerHandler(mr, sp, sr, noopLl));
+    commandBus.register(STOP_MINECRAFT_SERVER_COMMAND, new StopMinecraftServerHandler(mr, sp, sr, ms, ((id: string, _ms: number) => waitForProcessExit(sp)(id, 500)), noopLl));
     commandBus.register(DELETE_MINECRAFT_SERVER_COMMAND, new DeleteMinecraftServerHandler(mr, commandBus));
     commandBus.register(SEND_MINECRAFT_COMMAND_COMMAND, new SendMinecraftCommandHandler(mr, sr, ms));
 
@@ -522,13 +528,15 @@ describe("minecraft module", () => {
     const { BunMinecraftLogAdapter } = await import("../../src/modules/minecraft/infrastructure/process/bun-minecraft-log.adapter");
 
     const ms = new BunMinecraftStdinAdapter(sp);
-    const ml = new BunMinecraftLogAdapter(sp);
+    const ml = new BunMinecraftLogAdapter(sp, noopLogger);
+    const noopPr2 = new InMemoryPatternRegistryAdapter();
+    const noopLl2 = new MinecraftLogListener(ml, noopPr2, new EventBus(), noopLogger);
 
     commandBus.register(SPAWN_SERVER_COMMAND, new SpawnServerHandler(sp, sr));
     commandBus.register(KILL_SERVER_COMMAND, new KillServerHandler(sp, sr));
     commandBus.register(CREATE_MINECRAFT_SERVER_COMMAND, new CreateMinecraftServerHandler(mr));
-    commandBus.register(START_MINECRAFT_SERVER_COMMAND, new StartMinecraftServerHandler(mr, sp, sr));
-    commandBus.register(STOP_MINECRAFT_SERVER_COMMAND, new StopMinecraftServerHandler(mr, sp, sr, ms, ((id: string, _ms: number) => waitForProcessExit(sp)(id, 500))));
+    commandBus.register(START_MINECRAFT_SERVER_COMMAND, new StartMinecraftServerHandler(mr, sp, sr, noopLl2));
+    commandBus.register(STOP_MINECRAFT_SERVER_COMMAND, new StopMinecraftServerHandler(mr, sp, sr, ms, ((id: string, _ms: number) => waitForProcessExit(sp)(id, 500)), noopLl2));
     commandBus.register(DELETE_MINECRAFT_SERVER_COMMAND, new DeleteMinecraftServerHandler(mr, commandBus));
     commandBus.register(SEND_MINECRAFT_COMMAND_COMMAND, new SendMinecraftCommandHandler(mr, sr, ms));
 

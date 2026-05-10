@@ -146,56 +146,12 @@ export function registerMinecraftRoutes(
   }, SCOPES.SERVER_WRITE));
 
   // GET /minecraft/servers/:id/logs — Stream logs (SSE)
-  router.get("/minecraft/servers/:id/logs", guard.protect(async (request, params) => {
+  router.get("/minecraft/servers/:id/logs", guard.protect(async (_request, params) => {
     const serverId = params.id!;
     return handleErrors(async () => {
-      const logStream = await queryBus.execute<StreamMinecraftLogsQuery, ReadableStream<Uint8Array>>(
+      const sseStream = await queryBus.execute<StreamMinecraftLogsQuery, ReadableStream<Uint8Array>>(
         new StreamMinecraftLogsQuery(serverId),
       );
-
-      // Convert raw byte stream to SSE
-      const sseStream = new ReadableStream({
-        async start(controller) {
-          const encoder = new TextEncoder();
-          const reader = logStream.getReader();
-          const decoder = new TextDecoder();
-
-          // Clean up reader when client disconnects
-          const onAbort = () => {
-            reader.cancel().catch(() => {});
-            reader.releaseLock();
-            try { controller.close(); } catch { /* already closed */ }
-          };
-          request.signal.addEventListener("abort", onAbort, { once: true });
-
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              const text = decoder.decode(value, { stream: true });
-              // Split by lines and send each as SSE data event
-              const lines = text.split("\n");
-              for (const line of lines) {
-                if (line.length > 0) {
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(line)}\n\n`));
-                }
-              }
-            }
-          } catch (error) {
-            logger.debug("minecraft.sse.stream_error", {
-              module: "minecraft",
-              operation: "sse.stream",
-              serverId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          } finally {
-            request.signal.removeEventListener("abort", onAbort);
-            reader.releaseLock();
-            controller.close();
-          }
-        },
-      });
 
       return new Response(sseStream, {
         headers: {
