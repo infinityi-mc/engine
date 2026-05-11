@@ -6,8 +6,8 @@ const ProviderConfigSchema = z.object({
 });
 
 const LlmConfigSchema = z.object({
-  defaultProvider: z.string(),
-  defaultModel: z.string(),
+  defaultProvider: z.string().default("none"),
+  defaultModel: z.string().default("none"),
   providers: z.record(z.string(), ProviderConfigSchema),
 });
 

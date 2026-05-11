@@ -96,10 +96,12 @@ describe("config-watcher", () => {
           logger: noopLogger,
           onReload: () => {
             watcher.stop();
-            reject(new Error("onReload should not be called for invalid config"));
+            reject(
+              new Error("onReload should not be called for invalid config"),
+            );
           },
           onError: (error) => {
-            expect(error.message).toContain("Failed to parse config JSON");
+            expect(error.message).toContain("Failed to parse config at");
             watcher.stop();
             resolve();
           },
