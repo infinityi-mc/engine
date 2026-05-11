@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+import { getEngineUrl } from '$lib/config/engine-url';
 
 function getToken(): string | null {
 	if (typeof window === 'undefined') return null;
@@ -24,7 +24,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 		headers['Authorization'] = `Bearer ${token}`;
 	}
 
-	const res = await fetch(`${API_BASE}${path}`, {
+	const res = await fetch(`${getEngineUrl()}${path}`, {
 		...options,
 		headers
 	});

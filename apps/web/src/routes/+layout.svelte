@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 	import { page } from '$app/state';
+	import { getEngineUrl } from '$lib/config/engine-url';
 
 	const queryClient = new QueryClient({
 		defaultOptions: {
@@ -89,9 +90,9 @@
 						class="inline-block h-2 w-2 rounded-full"
 						style="background-color: var(--color-semantic-success);"
 					></span>
-					<span class="text-xs" style="color: var(--color-text-muted);">
-						localhost:3000
-					</span>
+				<span class="text-xs" style="color: var(--color-text-muted);">
+					{getEngineUrl() === '/api' ? 'localhost:3000 (proxy)' : getEngineUrl()}
+				</span>
 				</div>
 			</div>
 		</aside>
