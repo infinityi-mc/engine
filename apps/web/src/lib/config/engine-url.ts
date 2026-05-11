@@ -2,7 +2,6 @@ const ENGINE_URL_KEY = 'engine_url';
 const TOKEN_KEY = 'engine_token';
 
 const ENV_ENGINE_URL = import.meta.env.PUBLIC_ENGINE_URL as string | undefined;
-const ENV_TOKEN = import.meta.env.PUBLIC_JWT_TOKEN as string | undefined;
 
 const DEFAULT_ENGINE_URL = '/api';
 
@@ -22,7 +21,7 @@ export function clearEngineUrl(): void {
 
 export function getToken(): string | null {
 	if (typeof window === 'undefined') return null;
-	return localStorage.getItem(TOKEN_KEY) ?? ENV_TOKEN ?? null;
+	return localStorage.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
