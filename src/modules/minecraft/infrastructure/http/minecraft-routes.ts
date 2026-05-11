@@ -15,6 +15,8 @@ import { UpdateMinecraftServerCommand } from "../../application/commands/update-
 import type { MinecraftServerPatch } from "../../application/commands/update-minecraft-server.command";
 import { ListMinecraftServersQuery } from "../../application/queries/list-minecraft-servers.query";
 import { GetMinecraftServerQuery } from "../../application/queries/get-minecraft-server.query";
+import { GetServerMetadataQuery } from "../../application/queries/get-server-metadata.query";
+import type { ServerMetadata } from "../../domain/types/server-metadata";
 import { StreamMinecraftLogsQuery } from "../../application/queries/stream-minecraft-logs.query";
 import type { MinecraftServer } from "../../domain/types/minecraft-server";
 import { DEFAULT_SERVER_ARGS } from "../../domain/types/minecraft-server";
@@ -24,6 +26,7 @@ import { MinecraftServerNotFoundError } from "../../domain/errors/minecraft-serv
 import { MinecraftServerAlreadyExistsError } from "../../domain/errors/minecraft-server-already-exists.error";
 import { MinecraftServerNotRunningError } from "../../domain/errors/minecraft-server-not-running.error";
 import { MinecraftServerRunningError } from "../../domain/errors/minecraft-server-running.error";
+import { ServerPropertiesNotFoundError } from "../../domain/errors/server-properties-not-found.error";
 import { ServerAlreadyExistsError } from "../../../server/domain/errors/server-already-exists.error";
 import { ServerNotFoundError } from "../../../server/domain/errors/server-not-found.error";
 
@@ -109,6 +112,17 @@ export function registerMinecraftRoutes(
         new GetMinecraftServerQuery(serverId),
       );
       return jsonResponse(serializeServerDetails(details));
+    }, logger);
+  }, SCOPES.SERVER_READ));
+
+  // GET /minecraft/servers/:id/metadata — Get server metadata (properties + world info)
+  router.get("/minecraft/servers/:id/metadata", guard.protect(async (_request, params) => {
+    const serverId = params.id!;
+    return handleErrors(async () => {
+      const metadata = await queryBus.execute<GetServerMetadataQuery, ServerMetadata>(
+        new GetServerMetadataQuery(serverId),
+      );
+      return jsonResponse(serializeMetadata(metadata));
     }, logger);
   }, SCOPES.SERVER_READ));
 
@@ -205,6 +219,20 @@ function serializeServerDetails(details: MinecraftServerDetails): Record<string,
   };
 }
 
+function serializeMetadata(metadata: ServerMetadata): Record<string, unknown> {
+  return {
+    levelName: metadata.levelName,
+    maxPlayers: metadata.maxPlayers,
+    serverPort: metadata.serverPort,
+    levelInfo: {
+      isRunning: metadata.levelInfo.isRunning,
+      worldName: metadata.levelInfo.worldName,
+      minecraftVersion: metadata.levelInfo.minecraftVersion,
+      serverBrands: metadata.levelInfo.serverBrands,
+    },
+  };
+}
+
 function serializeInstance(instance: ServerInstance): Record<string, unknown> {
   return {
     id: instance.id,
@@ -281,6 +309,10 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
 
     if (error instanceof MinecraftServerRunningError) {
       return jsonResponse({ error: "MinecraftServerRunning", serverId: error.serverId, message: error.message }, { status: 409 });
+    }
+
+    if (error instanceof ServerPropertiesNotFoundError) {
+      return jsonResponse({ error: "ServerPropertiesNotFound", serverPath: error.serverPath, message: error.message }, { status: 404 });
     }
 
     if (error instanceof ServerAlreadyExistsError) {

@@ -135,13 +135,18 @@ export class PrismarineNbtAdapter implements NbtPort {
     return current;
   }
 
-  private truncate(tag: NbtTag, depth: number): unknown {
+  private truncate(tag: unknown, depth: number): unknown {
+    if (tag === null || tag === undefined) return tag;
+    if (typeof tag !== "object") return tag;
+
+    const nbtTag = tag as NbtTag;
+
     if (depth <= 0) {
-      return this.typeHint(tag);
+      return this.typeHint(nbtTag);
     }
 
-    if (tag.type === "compound") {
-      const compound = tag as Tags[TagType.Compound];
+    if (nbtTag.type === "compound") {
+      const compound = nbtTag as Tags[TagType.Compound];
       const entries = compound.value as Record<string, NbtTag>;
       const result: Record<string, unknown> = {};
       for (const [key, child] of Object.entries(entries)) {
@@ -150,18 +155,23 @@ export class PrismarineNbtAdapter implements NbtPort {
       return result;
     }
 
-    if (tag.type === "list") {
-      const list = tag as Tags[TagType.List];
-      const items = list.value.value as NbtTag[];
+    if (nbtTag.type === "list") {
+      const list = nbtTag as Tags[TagType.List];
+      const items = list.value.value as unknown[];
       return items.map((item) => this.truncate(item, depth - 1));
     }
 
-    return this.simplify(tag);
+    return this.simplify(nbtTag);
   }
 
-  private simplify(tag: NbtTag): unknown {
-    if (tag.type === "compound") {
-      const compound = tag as Tags[TagType.Compound];
+  private simplify(tag: unknown): unknown {
+    if (tag === null || tag === undefined) return tag;
+    if (typeof tag !== "object") return tag;
+
+    const nbtTag = tag as NbtTag;
+
+    if (nbtTag.type === "compound") {
+      const compound = nbtTag as Tags[TagType.Compound];
       const entries = compound.value as Record<string, NbtTag>;
       const result: Record<string, unknown> = {};
       for (const [key, child] of Object.entries(entries)) {
@@ -170,13 +180,13 @@ export class PrismarineNbtAdapter implements NbtPort {
       return result;
     }
 
-    if (tag.type === "list") {
-      const list = tag as Tags[TagType.List];
-      const items = list.value.value as NbtTag[];
+    if (nbtTag.type === "list") {
+      const list = nbtTag as Tags[TagType.List];
+      const items = list.value.value as unknown[];
       return items.map((item) => this.simplify(item));
     }
 
-    return (tag as { value: unknown }).value;
+    return (nbtTag as { value: unknown }).value;
   }
 
   private typeHint(tag: NbtTag): string {

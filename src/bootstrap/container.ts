@@ -62,6 +62,8 @@ import { GET_MINECRAFT_SERVER_QUERY } from "../modules/minecraft/application/que
 import { GetMinecraftServerHandler } from "../modules/minecraft/application/queries/get-minecraft-server.handler";
 import { STREAM_MINECRAFT_LOGS_QUERY } from "../modules/minecraft/application/queries/stream-minecraft-logs.query";
 import { StreamMinecraftLogsHandler } from "../modules/minecraft/application/queries/stream-minecraft-logs.handler";
+import { GET_SERVER_METADATA_QUERY } from "../modules/minecraft/application/queries/get-server-metadata.query";
+import { GetServerMetadataHandler } from "../modules/minecraft/application/queries/get-server-metadata.handler";
 import { JsonMinecraftServerRepositoryAdapter } from "../modules/minecraft/infrastructure/persistence/json-minecraft-server-repository.adapter";
 import { BunMinecraftStdinAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-stdin.adapter";
 import { BunMinecraftLogAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-log.adapter";
@@ -84,6 +86,7 @@ import { InMemoryToolRegistry } from "../modules/agent/infrastructure/registry/t
 import { ConfigAgentDefinitionRepository } from "../modules/agent/infrastructure/persistence/agent-definition-repository.adapter";
 import { RunPythonTool } from "../modules/agent/infrastructure/tools/run-python.tool";
 import { ReadMinecraftLogsTool } from "../modules/agent/infrastructure/tools/read-minecraft-logs.tool";
+import { MinecraftMetadataTool } from "../modules/agent/infrastructure/tools/minecraft-metadata.tool";
 import { AgentService } from "../modules/agent/application/agent.service";
 import { FileSessionRepository } from "../modules/agent/infrastructure/persistence/file-session-repository.adapter";
 import { MinecraftSessionManagerAdapter } from "../modules/agent/infrastructure/session/minecraft-session-manager.adapter";
@@ -110,6 +113,7 @@ import {
 } from "../modules/agent/infrastructure/tools/mcdoc-tools";
 import type { McdocRepositoryPort } from "../modules/mcdoc/domain/ports/mcdoc-repository.port";
 import { PrismarineNbtAdapter } from "../modules/minecraft/infrastructure/nbt/prismarine-nbt.adapter";
+import { FileSystemServerMetadataAdapter } from "../modules/minecraft/infrastructure/metadata/server-metadata.adapter";
 import {
   NbtReadTool,
   NbtGetTool,
@@ -217,6 +221,7 @@ export async function createContainer(): Promise<AppContainer> {
   patternRegistry.register("@ai", { action: "invoke_agent", payload: { agentName: "minecraft-ingame" } });
 
   const nbtAdapter = new PrismarineNbtAdapter(logger);
+  const serverMetadata = new FileSystemServerMetadataAdapter(nbtAdapter, logger);
 
   commandBus.register(
     CREATE_MINECRAFT_SERVER_COMMAND,
@@ -274,6 +279,10 @@ export async function createContainer(): Promise<AppContainer> {
       serverRegistry,
       minecraftLog,
     ),
+  );
+  queryBus.register(
+    GET_SERVER_METADATA_QUERY,
+    new GetServerMetadataHandler(minecraftRepository, serverMetadata),
   );
 
   // LLM module
@@ -344,6 +353,7 @@ export async function createContainer(): Promise<AppContainer> {
   toolRegistry.register(new NbtSearchTool(nbtAdapter, logger));
   toolRegistry.register(new NbtKeysTool(nbtAdapter, logger));
   toolRegistry.register(new NbtStructureTool(nbtAdapter, logger));
+  toolRegistry.register(new MinecraftMetadataTool(queryBus, logger));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);
   const sessionRepository = new FileSessionRepository({
