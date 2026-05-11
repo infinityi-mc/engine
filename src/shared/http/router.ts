@@ -23,6 +23,10 @@ export class Router {
     this.add("DELETE", pathname, handler);
   }
 
+  patch(pathname: string, handler: RouteHandler): void {
+    this.add("PATCH", pathname, handler);
+  }
+
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const allowedMethods = new Set<string>();

@@ -54,6 +54,8 @@ import { DELETE_MINECRAFT_SERVER_COMMAND } from "../modules/minecraft/applicatio
 import { DeleteMinecraftServerHandler } from "../modules/minecraft/application/commands/delete-minecraft-server.handler";
 import { SEND_MINECRAFT_COMMAND_COMMAND } from "../modules/minecraft/application/commands/send-minecraft-command.command";
 import { SendMinecraftCommandHandler } from "../modules/minecraft/application/commands/send-minecraft-command.handler";
+import { UPDATE_MINECRAFT_SERVER_COMMAND } from "../modules/minecraft/application/commands/update-minecraft-server.command";
+import { UpdateMinecraftServerHandler } from "../modules/minecraft/application/commands/update-minecraft-server.handler";
 import { LIST_MINECRAFT_SERVERS_QUERY } from "../modules/minecraft/application/queries/list-minecraft-servers.query";
 import { ListMinecraftServersHandler } from "../modules/minecraft/application/queries/list-minecraft-servers.handler";
 import { GET_MINECRAFT_SERVER_QUERY } from "../modules/minecraft/application/queries/get-minecraft-server.query";
@@ -209,6 +211,10 @@ export async function createContainer(): Promise<AppContainer> {
   commandBus.register(
     CREATE_MINECRAFT_SERVER_COMMAND,
     new CreateMinecraftServerHandler(minecraftRepository),
+  );
+  commandBus.register(
+    UPDATE_MINECRAFT_SERVER_COMMAND,
+    new UpdateMinecraftServerHandler(minecraftRepository, serverRegistry),
   );
   commandBus.register(
     START_MINECRAFT_SERVER_COMMAND,

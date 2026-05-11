@@ -5,13 +5,15 @@ import type { JwtGuard } from "../../../../shared/http/jwt-guard";
 import { getErrorMessage } from "../../../../shared/observability/error-utils";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import type { Router } from "../../../../shared/http/router";
-import { parseJson, requiredString, optionalStringArrayProperty } from "../../../../shared/http/route-helpers";
+import { parseJson, requiredString, optionalStringArrayProperty, isRecord } from "../../../../shared/http/route-helpers";
 import { SCOPES } from "./scopes";
 import { CreateMinecraftServerCommand } from "../../application/commands/create-minecraft-server.command";
 import { StartMinecraftServerCommand } from "../../application/commands/start-minecraft-server.command";
 import { StopMinecraftServerCommand } from "../../application/commands/stop-minecraft-server.command";
 import { DeleteMinecraftServerCommand } from "../../application/commands/delete-minecraft-server.command";
 import { SendMinecraftCommandCommand } from "../../application/commands/send-minecraft-command.command";
+import { UpdateMinecraftServerCommand } from "../../application/commands/update-minecraft-server.command";
+import type { MinecraftServerPatch } from "../../application/commands/update-minecraft-server.command";
 import { ListMinecraftServersQuery } from "../../application/queries/list-minecraft-servers.query";
 import { GetMinecraftServerQuery } from "../../application/queries/get-minecraft-server.query";
 import { StreamMinecraftLogsQuery } from "../../application/queries/stream-minecraft-logs.query";
@@ -22,6 +24,7 @@ import type { ServerInstance } from "../../../server/domain/types/server-instanc
 import { MinecraftServerNotFoundError } from "../../domain/errors/minecraft-server-not-found.error";
 import { MinecraftServerAlreadyExistsError } from "../../domain/errors/minecraft-server-already-exists.error";
 import { MinecraftServerNotRunningError } from "../../domain/errors/minecraft-server-not-running.error";
+import { MinecraftServerRunningError } from "../../domain/errors/minecraft-server-running.error";
 import { ServerAlreadyExistsError } from "../../../server/domain/errors/server-already-exists.error";
 import { ServerNotFoundError } from "../../../server/domain/errors/server-not-found.error";
 
@@ -71,6 +74,21 @@ export function registerMinecraftRoutes(
       );
 
       return jsonResponse(serializeServer(created), { status: 201 });
+    }, logger);
+  }, SCOPES.SERVER_WRITE));
+
+  // PATCH /minecraft/servers/:id — Update server definition (must be stopped)
+  router.patch("/minecraft/servers/:id", guard.protect(async (request, params) => {
+    const serverId = params.id!;
+    const parsed = await parseJson(request);
+    if (!parsed.ok) return parsed.response;
+
+    return handleErrors(async () => {
+      const patch = parsePatch(parsed.body);
+      const updated = await commandBus.execute<UpdateMinecraftServerCommand, MinecraftServer>(
+        new UpdateMinecraftServerCommand(serverId, patch),
+      );
+      return jsonResponse(serializeServer(updated));
     }, logger);
   }, SCOPES.SERVER_WRITE));
 
@@ -173,6 +191,8 @@ function serializeServer(server: MinecraftServer): Record<string, unknown> {
     jarFile: server.jarFile,
     jvmArgs: server.jvmArgs,
     serverArgs: server.serverArgs,
+    ...(server.players !== undefined ? { players: server.players } : {}),
+    ...(server.agents !== undefined ? { agents: server.agents } : {}),
   };
 }
 
@@ -199,6 +219,48 @@ function serializeInstance(instance: ServerInstance): Record<string, unknown> {
   };
 }
 
+function parsePatch(body: Record<string, unknown>): MinecraftServerPatch {
+  let patch: MinecraftServerPatch = {};
+
+  if (typeof body.name === "string") patch = { ...patch, name: body.name };
+  if (typeof body.directory === "string") patch = { ...patch, directory: body.directory };
+  if (typeof body.javaPath === "string") patch = { ...patch, javaPath: body.javaPath };
+  if (typeof body.jarFile === "string") patch = { ...patch, jarFile: body.jarFile };
+
+  const jvmArgs = optionalStringArrayProperty("jvmArgs", body.jvmArgs);
+  if (jvmArgs.jvmArgs !== undefined) patch = { ...patch, jvmArgs: jvmArgs.jvmArgs };
+
+  const serverArgs = optionalStringArrayProperty("serverArgs", body.serverArgs);
+  if (serverArgs.serverArgs !== undefined) patch = { ...patch, serverArgs: serverArgs.serverArgs };
+
+  if (isRecord(body.players)) {
+    const teams = body.players.teams;
+    if (isRecord(teams)) {
+      patch = {
+        ...patch,
+        players: {
+          teams: {
+            ...(Array.isArray(teams.prefix) ? { prefix: teams.prefix.filter((s): s is string => typeof s === "string") } : {}),
+            ...(Array.isArray(teams.suffix) ? { suffix: teams.suffix.filter((s): s is string => typeof s === "string") } : {}),
+          },
+        },
+      };
+    }
+  }
+
+  if (Array.isArray(body.agents)) {
+    patch = {
+      ...patch,
+      agents: body.agents.filter(isRecord).map((a) => ({
+        id: String(a.id),
+        ...(Array.isArray(a.players) ? { players: a.players.filter((s): s is string => typeof s === "string") } : {}),
+      })),
+    };
+  }
+
+  return patch;
+}
+
 async function handleErrors(action: () => Promise<Response>, logger: LoggerPort): Promise<Response> {
   try {
     return await action();
@@ -213,6 +275,10 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
 
     if (error instanceof MinecraftServerNotRunningError) {
       return jsonResponse({ error: "MinecraftServerNotRunning", serverId: error.serverId, message: error.message }, { status: 409 });
+    }
+
+    if (error instanceof MinecraftServerRunningError) {
+      return jsonResponse({ error: "MinecraftServerRunning", serverId: error.serverId, message: error.message }, { status: 409 });
     }
 
     if (error instanceof ServerAlreadyExistsError) {

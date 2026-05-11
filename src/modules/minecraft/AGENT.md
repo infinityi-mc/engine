@@ -36,6 +36,7 @@ Defined in `src/modules/minecraft/infrastructure/http/scopes.ts`:
 | Type | Name | Handler |
 |------|---------------|---------|
 | Command | `CreateMinecraftServerCommand` | `CreateMinecraftServerHandler` |
+| Command | `UpdateMinecraftServerCommand` | `UpdateMinecraftServerHandler` |
 | Command | `DeleteMinecraftServerCommand` | `DeleteMinecraftServerHandler` |
 | Command | `StartMinecraftServerCommand` | `StartMinecraftServerHandler` |
 | Command | `StopMinecraftServerCommand` | `StopMinecraftServerHandler` |
@@ -53,6 +54,7 @@ Defined in `src/modules/minecraft/infrastructure/http/scopes.ts`:
 | Method | Path | Scope | Status Codes |
 |--------|------|-------|-------------|
 | POST | `/minecraft/servers` | `minecraft:server:write` | `201` created, `409` already exists |
+| PATCH | `/minecraft/servers/:id` | `minecraft:server:write` | `200` updated, `404` not found, `409` server running |
 | GET | `/minecraft/servers` | `minecraft:server:read` | `200` list |
 | GET | `/minecraft/servers/:id` | `minecraft:server:read` | `200` details |
 | DELETE | `/minecraft/servers/:id` | `minecraft:server:write` | `200` ok, `404` not found |
@@ -69,6 +71,7 @@ The `GET /minecraft/servers/:id/logs` endpoint uses Server-Sent Events (SSE) to 
 Standard HTTP mappings for domain errors:
 - `MinecraftServerNotFoundError` -> `404`
 - `MinecraftServerAlreadyExistsError` -> `409`
+- `MinecraftServerRunningError` -> `409`
 - `MinecraftServerNotRunningError` -> `409`
 - Core server errors (`ServerNotFoundError`, `ServerAlreadyExistsError`) -> mapped to 404/409 appropriately.
 
