@@ -1,42 +1,78 @@
-# sv
+# engine web
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Web dashboard for [engine](../../README.md) — a local-first API server for AI agents.
 
-## Creating a project
+## Stack
 
-If you're seeing this, you've probably already done this step. Congrats!
+- **SvelteKit** (SPA mode, SSR disabled) — file-based routing, `adapter-static`
+- **Tailwind CSS v4** — utility-first styling with `@tailwindcss/vite`
+- **engine-retro theme** — dark navy surfaces, Bitter slab-serif, hard offset shadows
+- **@tanstack/svelte-query** — data fetching, caching, auto-refetch
+- **TypeScript** — strict mode
 
-```sh
-# create a new project
-npx sv create my-app
+## Getting started
+
+```bash
+bun install
+bun run dev
 ```
 
-To recreate this project with the same configuration:
+The dev server starts at `http://localhost:5173`. API calls to `/api/*` are proxied to the engine server on `http://localhost:3000`.
 
-```sh
-# recreate this project
-npx sv@0.15.3 create --template minimal --types ts --no-install .
+### Authentication
+
+Set a JWT token in the browser console:
+
+```js
+localStorage.setItem('engine_token', 'your-token-here')
 ```
 
-## Developing
+### Build
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```bash
+bun run build     # production build to build/
+bun run preview   # preview the production build
 ```
 
-## Building
+## Project structure
 
-To create a production version of your app:
-
-```sh
-npm run build
+```
+src/
+├── app.css          Tailwind + engine-retro design tokens
+├── app.html         Shell template (Bitter font, data-theme)
+├── lib/api/
+│   └── client.ts    fetch wrapper with JWT injection
+└── routes/
+    ├── +layout.svelte   Sidebar shell + QueryClientProvider
+    ├── +page.svelte     Overview (placeholder)
+    ├── logs/            Log viewer (placeholder)
+    ├── agent/           Agent sessions (placeholder)
+    └── settings/        Configuration (placeholder)
 ```
 
-You can preview the production build with `npm run preview`.
+## Design system
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+All colors, typography, and layout values are defined as CSS custom properties under `[data-theme="engine-retro"]` in `app.css`. Use them via Tailwind arbitrary values:
+
+```html
+<div style="background-color: var(--color-surface-card); border-color: var(--color-surface-border);">
+```
+
+Key tokens:
+| Token | Value | Usage |
+|-------|-------|-------|
+| `surface.background` | `#0F1318` | Page background |
+| `surface.card` | `#1C2230` | Cards, panels, sidebar |
+| `primary` | `#3AA5FF` | Links, active states |
+| `text.primary` | `#E8E0D8` | Body text (warm cream) |
+| `text.secondary` | `#A89E94` | Labels, descriptions |
+| `font.heading.family` | `Bitter, Georgia, serif` | Headings and body |
+
+## Scripts
+
+```bash
+bun run dev        # dev server with HMR
+bun run build      # production build
+bun run preview    # preview production build
+bun run check      # typecheck with svelte-check
+```
