@@ -106,7 +106,7 @@ describe("system module", () => {
   });
 
   test("system routes return clear JSON errors for invalid bodies and methods", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testSecret = "test-secret-key-for-unit-tests";
     const testGuard = new JwtGuard({ secret: testSecret, issuer: undefined, audience: undefined });
@@ -133,7 +133,7 @@ describe("system module", () => {
   });
 
   test("system routes reject requests without a valid JWT", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testGuard = new JwtGuard({ secret: "test-secret-key-for-unit-tests", issuer: undefined, audience: undefined });
     registerSystemRoutes(router, container.commandBus, container.queryBus, testGuard, container.logger);
@@ -149,7 +149,7 @@ describe("system module", () => {
   });
 
   test("system routes reject requests with insufficient scope", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testSecret = "test-secret-key-for-unit-tests";
     const testGuard = new JwtGuard({ secret: testSecret, issuer: undefined, audience: undefined });

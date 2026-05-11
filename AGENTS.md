@@ -84,3 +84,7 @@ All system and server routes are JWT-protected via `JwtGuard.protect(handler, sc
 ### Persistence
 - Persistent data (files, databases) must be stored inside `data/`.
 - Application configuration stored in `config.yaml`.
+
+### Mcdoc (Minecraft schema) module
+
+`src/modules/mcdoc/` loads `data/minecraft/symbol.json` (1,821 Minecraft Java Edition schemas) and exposes read-only search/browse over them. On startup it builds a derived index and persists it under `data/minecraft/mcdoc-index/<ref>/` for fast re-loads. `createContainer()` is async because the index must be ready before any request. See `src/modules/mcdoc/AGENT.md` for tool list, HTTP routes (scope `mcdoc:read`), and limits. Agent tools: `mcdoc_meta`, `mcdoc_list_packages`, `mcdoc_search`, `mcdoc_get`, `mcdoc_grep_fields`, `mcdoc_find_references`.

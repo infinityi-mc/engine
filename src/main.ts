@@ -5,10 +5,11 @@ import { registerSystemRoutes } from "./modules/system/infrastructure/http/syste
 import { registerServerRoutes } from "./modules/server/infrastructure/http/server-routes";
 import { registerMinecraftRoutes } from "./modules/minecraft/infrastructure/http/minecraft-routes";
 import { registerAgentRoutes } from "./modules/agent/infrastructure/http/agent-routes";
+import { registerMcdocRoutes } from "./modules/mcdoc/infrastructure/http/mcdoc-routes";
 
 const port = Number(Bun.env.PORT ?? 3000);
 const hostname = Bun.env.HOST ?? "localhost";
-const container = createContainer();
+const container = await createContainer();
 const router = new Router();
 const link = (url: string, text: string) =>
   `\x1b]8;;${url}\x1b\\${text}\x1b]8;;\x1b\\`;
@@ -38,6 +39,12 @@ registerMinecraftRoutes(
 registerAgentRoutes(
   router,
   container.agentService,
+  container.guard,
+  container.logger,
+);
+registerMcdocRoutes(
+  router,
+  container.queryBus,
   container.guard,
   container.logger,
 );

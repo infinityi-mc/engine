@@ -230,7 +230,7 @@ describe("server module", () => {
   });
 
   test("server routes return correct JSON for spawn and list", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testSecret = "test-secret-key-for-unit-tests";
     const testGuard = new JwtGuard({ secret: testSecret, issuer: undefined, audience: undefined });
@@ -290,7 +290,7 @@ describe("server module", () => {
   });
 
   test("server routes reject requests without a valid JWT", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testGuard = new JwtGuard({ secret: "test-secret-key-for-unit-tests", issuer: undefined, audience: undefined });
     registerServerRoutes(router, container.commandBus, container.queryBus, testGuard, container.logger);
@@ -305,7 +305,7 @@ describe("server module", () => {
   });
 
   test("server routes reject requests with insufficient scope", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testSecret = "test-secret-key-for-unit-tests";
     const testGuard = new JwtGuard({ secret: testSecret, issuer: undefined, audience: undefined });
@@ -330,7 +330,7 @@ describe("server module", () => {
   });
 
   test("server routes return 404 for unknown instance status", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testSecret = "test-secret-key-for-unit-tests";
     const testGuard = new JwtGuard({ secret: testSecret, issuer: undefined, audience: undefined });
@@ -353,7 +353,7 @@ describe("server module", () => {
   });
 
   test("server routes return 409 for duplicate instance ID", async () => {
-    const container = createContainer();
+    const container = await createContainer();
     const router = new Router();
     const testSecret = "test-secret-key-for-unit-tests";
     const testGuard = new JwtGuard({ secret: testSecret, issuer: undefined, audience: undefined });
