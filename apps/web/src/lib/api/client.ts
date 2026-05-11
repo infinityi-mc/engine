@@ -1,17 +1,6 @@
-import { getEngineUrl } from '$lib/config/engine-url';
+import { getEngineUrl, getToken } from '$lib/config/engine-url';
 
-function getToken(): string | null {
-	if (typeof window === 'undefined') return null;
-	return localStorage.getItem('engine_token');
-}
-
-export function setToken(token: string) {
-	localStorage.setItem('engine_token', token);
-}
-
-export function clearToken() {
-	localStorage.removeItem('engine_token');
-}
+export { setToken, clearToken } from '$lib/config/engine-url';
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 	const token = getToken();
