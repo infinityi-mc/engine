@@ -61,6 +61,7 @@ function makeFakeToolRegistry(): ToolRegistryPort {
   return {
     get: () => undefined,
     getAll: () => [],
+    getByGroup: () => [],
     getDefinitions: () => [],
     register: () => {},
   };

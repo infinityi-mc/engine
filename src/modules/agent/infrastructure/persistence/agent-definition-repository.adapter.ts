@@ -1,7 +1,10 @@
 import type { AgentDefinitionRepositoryPort } from "../../domain/ports/agent-definition-repository.port";
+import type { ToolRegistryPort } from "../../domain/ports/tool-registry.port";
 import type { AgentDefinition } from "../../domain/types/agent.types";
 import type { ConfigPort } from "../../../../shared/config/config.port";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
+
+const GROUP_PREFIX = "group:";
 
 export class ConfigAgentDefinitionRepository implements AgentDefinitionRepositoryPort {
   private definitions: Map<string, AgentDefinition> = new Map();
@@ -9,6 +12,7 @@ export class ConfigAgentDefinitionRepository implements AgentDefinitionRepositor
 
   constructor(
     private readonly config: ConfigPort,
+    private readonly toolRegistry: ToolRegistryPort,
     private readonly logger: LoggerPort,
   ) {
     this.loadPromise = this.loadDefinitions();
@@ -47,7 +51,7 @@ export class ConfigAgentDefinitionRepository implements AgentDefinitionRepositor
         description: agentConf.description,
         systemPrompt,
         ...(agentConf.model ? { model: agentConf.model } : {}),
-        tools: agentConf.tools,
+        tools: this.resolveTools(agentConf.tools, id),
         runtime: agentConf.runtime ?? "tool-use-loop",
         ...(agentConf.maxIterations !== undefined ? { maxIterations: agentConf.maxIterations } : {}),
         ...(agentConf.temperature !== undefined ? { temperature: agentConf.temperature } : {}),
@@ -79,5 +83,32 @@ export class ConfigAgentDefinitionRepository implements AgentDefinitionRepositor
       }
     }
     return prompt;
+  }
+
+  private resolveTools(rawTools: readonly string[], agentId: string): string[] {
+    const resolved: string[] = [];
+    const seen = new Set<string>();
+
+    for (const entry of rawTools) {
+      if (entry.startsWith(GROUP_PREFIX)) {
+        const groupName = entry.slice(GROUP_PREFIX.length);
+        const groupTools = this.toolRegistry.getByGroup(groupName);
+        if (groupTools.length === 0) {
+          this.logger.warn("agent.tool_group_empty_or_unknown", { agentId, groupName });
+          continue;
+        }
+        for (const tool of groupTools) {
+          if (!seen.has(tool.name)) {
+            seen.add(tool.name);
+            resolved.push(tool.name);
+          }
+        }
+      } else if (!seen.has(entry)) {
+        seen.add(entry);
+        resolved.push(entry);
+      }
+    }
+
+    return resolved;
   }
 }

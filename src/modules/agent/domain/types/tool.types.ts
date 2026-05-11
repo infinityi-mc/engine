@@ -8,5 +8,6 @@ export interface Tool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
+  readonly groups?: readonly string[];
   execute(input: unknown): Promise<ToolResult>;
 }

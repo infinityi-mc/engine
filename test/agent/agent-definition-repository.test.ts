@@ -3,9 +3,32 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ConfigAgentDefinitionRepository } from "../../src/modules/agent/infrastructure/persistence/agent-definition-repository.adapter";
+import { InMemoryToolRegistry } from "../../src/modules/agent/infrastructure/registry/tool-registry.adapter";
+import type { Tool, ToolResult } from "../../src/modules/agent/domain/types/tool.types";
 import type { ConfigPort } from "../../src/shared/config/config.port";
 import type { AppConfig } from "../../src/shared/config/config.types";
 import type { LoggerPort } from "../../src/shared/observability/logger.port";
+
+const silentLogger: LoggerPort = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
+
+function makeToolRegistry(): InMemoryToolRegistry {
+  return new InMemoryToolRegistry(silentLogger);
+}
+
+function makeGroupedTool(name: string, groups: readonly string[]): Tool {
+  return {
+    name,
+    description: `tool ${name}`,
+    inputSchema: { type: "object", properties: {} },
+    groups,
+    execute: async (): Promise<ToolResult> => ({ output: "" }),
+  };
+}
 
 interface FakeConfigPort extends ConfigPort {
   reloadAgentConfig(cfg: AppConfig["agent"]): void;
@@ -75,7 +98,7 @@ describe("ConfigAgentDefinitionRepository", () => {
   test("returns empty when agent config is undefined", async () => {
     const config = makeFakeConfig(undefined);
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     expect(await repo.getAll()).toHaveLength(0);
     expect(await repo.get("any")).toBeUndefined();
@@ -88,7 +111,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       agents: {},
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     expect(await repo.getAll()).toHaveLength(0);
   });
@@ -108,7 +131,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("test-agent");
     expect(def).toBeDefined();
@@ -138,7 +161,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("file-agent");
     expect(def).toBeDefined();
@@ -160,7 +183,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("missing-agent");
     expect(def).toBeDefined();
@@ -185,7 +208,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("custom-model");
     expect(def!.model).toEqual({ provider: "anthropic", model: "claude-sonnet-4.5" });
@@ -206,7 +229,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("minimal");
     expect(def!.runtime).toBe("tool-use-loop");
@@ -238,7 +261,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const all = await repo.getAll();
     expect(all).toHaveLength(2);
@@ -260,7 +283,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     expect(await repo.getAll()).toHaveLength(1);
 
@@ -300,7 +323,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("traversal-agent");
     expect(def).toBeDefined();
@@ -330,7 +353,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("absolute-agent");
     expect(def).toBeDefined();
@@ -356,7 +379,7 @@ describe("ConfigAgentDefinitionRepository", () => {
       },
     });
     const logger = makeFakeLogger();
-    const repo = new ConfigAgentDefinitionRepository(config, logger);
+    const repo = new ConfigAgentDefinitionRepository(config, makeToolRegistry(), logger);
 
     const def = await repo.get("mixed-agent");
     expect(def).toBeDefined();
@@ -364,5 +387,111 @@ describe("ConfigAgentDefinitionRepository", () => {
 
     const traversalWarnings = logger.warnLogs.filter((l) => l.message === "agent.system_prompt_path_traversal_rejected");
     expect(traversalWarnings).toHaveLength(1);
+  });
+
+  test("resolves group: references to member tool names", async () => {
+    const registry = makeToolRegistry();
+    registry.register(makeGroupedTool("read_mc_logs", ["minecraft"]));
+    registry.register(makeGroupedTool("send_mc_cmd", ["minecraft"]));
+    registry.register(makeGroupedTool("run_python", []));
+
+    const config = makeFakeConfig({
+      defaultMaxIterations: 10,
+      defaultTimeoutMs: 300_000,
+      agents: {
+        "grouped": {
+          name: "Grouped",
+          description: "Agent with group ref",
+          systemPrompt: "hi",
+          tools: ["run_python", "group:minecraft"],
+          runtime: "tool-use-loop",
+        },
+      },
+    });
+    const logger = makeFakeLogger();
+    const repo = new ConfigAgentDefinitionRepository(config, registry, logger);
+
+    const def = await repo.get("grouped");
+    expect(def).toBeDefined();
+    expect(def!.tools).toEqual(["run_python", "read_mc_logs", "send_mc_cmd"]);
+  });
+
+  test("warns and skips unknown group, preserving individual tools", async () => {
+    const registry = makeToolRegistry();
+    registry.register(makeGroupedTool("run_python", []));
+
+    const config = makeFakeConfig({
+      defaultMaxIterations: 10,
+      defaultTimeoutMs: 300_000,
+      agents: {
+        "unknown-group": {
+          name: "Unknown Group Agent",
+          description: "d",
+          systemPrompt: "hi",
+          tools: ["run_python", "group:does_not_exist"],
+          runtime: "tool-use-loop",
+        },
+      },
+    });
+    const logger = makeFakeLogger();
+    const repo = new ConfigAgentDefinitionRepository(config, registry, logger);
+
+    const def = await repo.get("unknown-group");
+    expect(def!.tools).toEqual(["run_python"]);
+
+    const warns = logger.warnLogs.filter((l) => l.message === "agent.tool_group_empty_or_unknown");
+    expect(warns).toHaveLength(1);
+    expect(warns[0]!.context).toEqual({ agentId: "unknown-group", groupName: "does_not_exist" });
+  });
+
+  test("warns on empty group (no tools registered under that name)", async () => {
+    const registry = makeToolRegistry();
+    registry.register(makeGroupedTool("foo", ["other"]));
+
+    const config = makeFakeConfig({
+      defaultMaxIterations: 10,
+      defaultTimeoutMs: 300_000,
+      agents: {
+        "empty-group": {
+          name: "Empty Group Agent",
+          description: "d",
+          systemPrompt: "hi",
+          tools: ["group:empty"],
+          runtime: "tool-use-loop",
+        },
+      },
+    });
+    const logger = makeFakeLogger();
+    const repo = new ConfigAgentDefinitionRepository(config, registry, logger);
+
+    const def = await repo.get("empty-group");
+    expect(def!.tools).toEqual([]);
+    const warns = logger.warnLogs.filter((l) => l.message === "agent.tool_group_empty_or_unknown");
+    expect(warns).toHaveLength(1);
+  });
+
+  test("dedupes when a tool is referenced both directly and via group", async () => {
+    const registry = makeToolRegistry();
+    registry.register(makeGroupedTool("run_python", ["scripting"]));
+    registry.register(makeGroupedTool("run_bash", ["scripting"]));
+
+    const config = makeFakeConfig({
+      defaultMaxIterations: 10,
+      defaultTimeoutMs: 300_000,
+      agents: {
+        "dedupe": {
+          name: "Dedupe Agent",
+          description: "d",
+          systemPrompt: "hi",
+          tools: ["run_python", "group:scripting"],
+          runtime: "tool-use-loop",
+        },
+      },
+    });
+    const logger = makeFakeLogger();
+    const repo = new ConfigAgentDefinitionRepository(config, registry, logger);
+
+    const def = await repo.get("dedupe");
+    expect(def!.tools).toEqual(["run_python", "run_bash"]);
   });
 });

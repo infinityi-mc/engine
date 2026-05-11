@@ -16,7 +16,12 @@ const AgentDefinitionSchema = z.object({
   description: z.string().min(1),
   systemPrompt: z.string().min(1),
   model: z.object({ provider: z.string(), model: z.string() }).optional(),
-  tools: z.array(z.string()),
+  tools: z.array(
+    z.string().refine(
+      (s) => s.length > 0 && (!s.startsWith("group:") || s.length > 6),
+      { message: "tool entry must be a non-empty tool name or 'group:<name>' with a non-empty name" },
+    ),
+  ),
   runtime: z.enum(["tool-use-loop", "single-shot"]).default("tool-use-loop"),
   maxIterations: z.number().positive().optional(),
   temperature: z.number().positive().optional(),

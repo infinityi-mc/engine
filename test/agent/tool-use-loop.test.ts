@@ -63,6 +63,7 @@ function makeFakeToolRegistry(tools: Tool[] = []): ToolRegistryPort {
   return {
     get: (name: string) => map.get(name),
     getAll: () => [...map.values()],
+    getByGroup: () => [],
     getDefinitions: (names: readonly string[]) =>
       names.flatMap((name) => {
         const tool = map.get(name);

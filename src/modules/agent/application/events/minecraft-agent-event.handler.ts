@@ -9,6 +9,7 @@ import type { MinecraftLogPatternMatched } from "../../../minecraft/domain/event
 import { MINECRAFT_LOG_PATTERN_MATCHED } from "../../../minecraft/domain/events/minecraft-log-pattern-matched.event";
 
 const ACTION_INVOKE_AGENT = "invoke_agent";
+const MC_CHAT_MAX_RESPONSE_LENGTH = 200;
 
 interface TellrawPayload {
   agentName: string;
@@ -159,6 +160,44 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
   }
 
   private async sendTellraw(
+    serverId: string,
+    payload: TellrawPayload,
+  ): Promise<void> {
+    const chunks = this.splitText(payload.response, MC_CHAT_MAX_RESPONSE_LENGTH);
+    for (const chunk of chunks) {
+      await this.sendSingleTellraw(serverId, { ...payload, response: chunk });
+    }
+  }
+
+  private splitText(text: string, maxLength: number): string[] {
+    const lines = text.split("\n");
+    const chunks: string[] = [];
+
+    for (const line of lines) {
+      if (line.length <= maxLength) {
+        chunks.push(line);
+        continue;
+      }
+
+      let remaining = line;
+      while (remaining.length > 0) {
+        if (remaining.length <= maxLength) {
+          chunks.push(remaining);
+          break;
+        }
+
+        let splitAt = remaining.lastIndexOf(" ", maxLength);
+        if (splitAt <= 0) splitAt = maxLength;
+
+        chunks.push(remaining.slice(0, splitAt));
+        remaining = remaining.slice(splitAt).trimStart();
+      }
+    }
+
+    return chunks;
+  }
+
+  private async sendSingleTellraw(
     serverId: string,
     payload: TellrawPayload,
   ): Promise<void> {

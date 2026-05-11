@@ -5,6 +5,7 @@ import type { LoggerPort } from "../../../../shared/observability/logger.port";
 
 export class InMemoryToolRegistry implements ToolRegistryPort {
   private readonly tools = new Map<string, Tool>();
+  private readonly groupIndex = new Map<string, Set<Tool>>();
 
   constructor(private readonly logger: LoggerPort) {}
 
@@ -13,11 +14,36 @@ export class InMemoryToolRegistry implements ToolRegistryPort {
   }
 
   register(tool: Tool): void {
+    const previous = this.tools.get(tool.name);
+    if (previous) {
+      for (const groupName of previous.groups ?? []) {
+        const set = this.groupIndex.get(groupName);
+        if (set) {
+          set.delete(previous);
+          if (set.size === 0) {
+            this.groupIndex.delete(groupName);
+          }
+        }
+      }
+    }
     this.tools.set(tool.name, tool);
+    for (const groupName of tool.groups ?? []) {
+      let set = this.groupIndex.get(groupName);
+      if (!set) {
+        set = new Set<Tool>();
+        this.groupIndex.set(groupName, set);
+      }
+      set.add(tool);
+    }
   }
 
   getAll(): Tool[] {
     return [...this.tools.values()];
+  }
+
+  getByGroup(groupName: string): Tool[] {
+    const set = this.groupIndex.get(groupName);
+    return set ? [...set] : [];
   }
 
   getDefinitions(names: readonly string[]): ToolDefinition[] {

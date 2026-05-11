@@ -284,7 +284,7 @@ export function createContainer(): AppContainer {
   toolRegistry.register(new RunPythonTool(terminal, logger));
   toolRegistry.register(new ReadMinecraftLogsTool(minecraftRepository, logger));
 
-  const agentDefinitions = new ConfigAgentDefinitionRepository(config, logger);
+  const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);
   const sessionRepository = new FileSessionRepository({
     dataDir: path.join(dataDir, "sessions"),
     logger,

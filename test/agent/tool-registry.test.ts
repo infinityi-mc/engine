@@ -19,6 +19,16 @@ function makeTool(name: string, description = `A tool called ${name}`): Tool {
   };
 }
 
+function makeToolWithGroups(name: string, groups: readonly string[]): Tool {
+  return {
+    name,
+    description: `A tool called ${name}`,
+    inputSchema: { type: "object", properties: {} },
+    groups,
+    execute: async (): Promise<ToolResult> => ({ output: `${name} executed` }),
+  };
+}
+
 describe("InMemoryToolRegistry", () => {
   test("registers and retrieves a tool", () => {
     const registry = new InMemoryToolRegistry(noopLogger);
@@ -126,5 +136,56 @@ describe("InMemoryToolRegistry", () => {
     expect(warnings[0]!.context).toEqual({ toolName: "typo_tool" });
     expect(warnings[1]!.message).toBe("agent.tool_not_found_in_registry");
     expect(warnings[1]!.context).toEqual({ toolName: "another_missing" });
+  });
+
+  test("indexes tool under each of its groups", () => {
+    const registry = new InMemoryToolRegistry(noopLogger);
+    const tool = makeToolWithGroups("read_mc_logs", ["minecraft", "system"]);
+
+    registry.register(tool);
+
+    expect(registry.getByGroup("minecraft")).toEqual([tool]);
+    expect(registry.getByGroup("system")).toEqual([tool]);
+  });
+
+  test("tool without groups field is not in any group", () => {
+    const registry = new InMemoryToolRegistry(noopLogger);
+    const tool = makeTool("read_file");
+
+    registry.register(tool);
+
+    expect(registry.getByGroup("any")).toEqual([]);
+  });
+
+  test("getByGroup returns empty array for unknown group", () => {
+    const registry = new InMemoryToolRegistry(noopLogger);
+    registry.register(makeToolWithGroups("foo", ["bar"]));
+
+    expect(registry.getByGroup("unknown")).toEqual([]);
+  });
+
+  test("multiple tools share a group", () => {
+    const registry = new InMemoryToolRegistry(noopLogger);
+    const a = makeToolWithGroups("a", ["shared"]);
+    const b = makeToolWithGroups("b", ["shared"]);
+
+    registry.register(a);
+    registry.register(b);
+
+    const members = registry.getByGroup("shared").map((t) => t.name).sort();
+    expect(members).toEqual(["a", "b"]);
+  });
+
+  test("re-registering a tool with different groups updates the index", () => {
+    const registry = new InMemoryToolRegistry(noopLogger);
+    const v1 = makeToolWithGroups("dual", ["g1", "g2"]);
+    const v2 = makeToolWithGroups("dual", ["g3"]);
+
+    registry.register(v1);
+    registry.register(v2);
+
+    expect(registry.getByGroup("g1")).toEqual([]);
+    expect(registry.getByGroup("g2")).toEqual([]);
+    expect(registry.getByGroup("g3")).toEqual([v2]);
   });
 });
