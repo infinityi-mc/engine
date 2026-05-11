@@ -10,6 +10,7 @@ export class ReadMinecraftLogsTool implements Tool {
   readonly name = "read_minecraft_logs";
   readonly description =
     "Read log output from a Minecraft server. Returns the most recent lines from the server log file.";
+  readonly groups = ["minecraft"] as const;
   readonly inputSchema: Record<string, unknown> = {
     type: "object",
     properties: {
@@ -45,7 +46,10 @@ export class ReadMinecraftLogsTool implements Tool {
 
     const server = await this.repository.get(serverId);
     if (server === undefined) {
-      return { output: `Minecraft server not found: ${serverId}`, isError: true };
+      return {
+        output: `Minecraft server not found: ${serverId}`,
+        isError: true,
+      };
     }
 
     const logPath = join(server.directory, "logs", "latest.log");
@@ -99,12 +103,19 @@ function validateInput(
   const record = input as Record<string, unknown>;
 
   if (typeof record.serverId !== "string" || record.serverId.length === 0) {
-    return { ok: false, error: "Missing or invalid required field: serverId (non-empty string)." };
+    return {
+      ok: false,
+      error: "Missing or invalid required field: serverId (non-empty string).",
+    };
   }
 
   let lines = DEFAULT_LINES;
   if (record.lines !== undefined) {
-    if (typeof record.lines !== "number" || !Number.isInteger(record.lines) || record.lines < 1) {
+    if (
+      typeof record.lines !== "number" ||
+      !Number.isInteger(record.lines) ||
+      record.lines < 1
+    ) {
       return { ok: false, error: "lines must be a positive integer." };
     }
     lines = Math.min(record.lines, MAX_LINES);

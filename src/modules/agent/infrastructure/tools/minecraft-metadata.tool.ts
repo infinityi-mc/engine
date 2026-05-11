@@ -11,6 +11,7 @@ export class MinecraftMetadataTool implements Tool {
   readonly name = "minecraft_metadata";
   readonly description =
     "Get metadata for a Minecraft server: server.properties values (levelName, maxPlayers, serverPort) and world info (isRunning, worldName, minecraftVersion, serverBrands).";
+  readonly groups = ["minecraft"] as const;
   readonly inputSchema: Record<string, unknown> = {
     type: "object",
     properties: {
@@ -33,13 +34,16 @@ export class MinecraftMetadataTool implements Tool {
 
     const serverId = obj.serverId;
     if (typeof serverId !== "string" || serverId.length === 0) {
-      return toolError("Missing or invalid required field: serverId (non-empty string).");
+      return toolError(
+        "Missing or invalid required field: serverId (non-empty string).",
+      );
     }
 
     try {
-      const metadata = await this.queryBus.execute<GetServerMetadataQuery, ServerMetadata>(
-        new GetServerMetadataQuery(serverId),
-      );
+      const metadata = await this.queryBus.execute<
+        GetServerMetadataQuery,
+        ServerMetadata
+      >(new GetServerMetadataQuery(serverId));
       this.logger.info("agent.tool.minecraft_metadata.executed", { serverId });
       return jsonOk(metadata);
     } catch (error) {
