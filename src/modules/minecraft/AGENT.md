@@ -17,6 +17,21 @@ The module defines the following Minecraft-specific ports:
 - `MinecraftServerRepositoryPort`: Owns the persistence of Minecraft server definitions (`save`, `remove`, `get`, `list`).
 - `MinecraftStdinPort`: Owns the capability to send commands directly to the running Minecraft server's stdin (e.g., `/op player`, `/stop`).
 - `MinecraftLogPort`: Owns the capability to stream stdout/stderr logs from the running server process.
+- `NbtPort`: Owns the capability to read, navigate, and search Minecraft NBT .dat files (level.dat, playerdata, etc.). Read-only — no write-back.
+
+### NBT Tools (Agent)
+
+Five agent tools for reading NBT data, registered under group `nbt`:
+
+| Tool | Name | Parameters | Description |
+|------|------|------------|-------------|
+| `NbtReadTool` | `nbt_read` | `filePath`, `depth` (1-10) | Read .dat file, return tree truncated to depth. Never returns full tree. |
+| `NbtGetTool` | `nbt_get` | `filePath`, `path` | Navigate to dot-separated path, return value. |
+| `NbtSearchTool` | `nbt_search` | `filePath`, `pattern`, `limit?` (max 200) | Find all key paths matching regex pattern. |
+| `NbtKeysTool` | `nbt_keys` | `filePath`, `path?` | List immediate child keys with types at a path. |
+| `NbtStructureTool` | `nbt_structure` | `filePath`, `depth` (1-5) | Schema-like overview: key names + tag types. |
+
+The `PrismarineNbtAdapter` uses the `prismarine-nbt` library which handles GZip/Zlib decompression and Java/Bedrock format auto-detection.
 
 ## API Verification (JWT + Scopes)
 

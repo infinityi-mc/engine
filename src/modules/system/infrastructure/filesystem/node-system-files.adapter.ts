@@ -5,6 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { getErrorMessage, getErrorName } from "../../../../shared/observability/error-utils";
 import type { LoggerPort, LogLevel } from "../../../../shared/observability/logger.port";
 import { noopLogger } from "../../../../shared/observability/logger.port";
+import { validateRegexPattern } from "../../../../shared/validation/regex-safety";
 import { ClientInputError } from "../../domain/errors/client-input.error";
 import { UnsupportedToolError } from "../../domain/errors/unsupported-tool.error";
 import type {
@@ -23,7 +24,6 @@ import type { TerminalPort, TerminalResult } from "../../domain/ports/terminal.p
 const defaultMaxGlobResults = 10_000;
 const defaultMaxGrepFiles = 10_000;
 const defaultMaxGrepDepth = 64;
-const maxGrepPatternLength = 256;
 type ToolInput = AwkInput | SedInput;
 
 export class NodeSystemFilesAdapter implements FilesystemPort {
@@ -75,7 +75,10 @@ export class NodeSystemFilesAdapter implements FilesystemPort {
 
     try {
       const files = await this.resolveGrepFiles(input.path ?? ".", input.include);
-      assertSafeRegexPattern(input.pattern);
+      const regexError = validateRegexPattern(input.pattern);
+      if (regexError !== undefined) {
+        throw new ClientInputError(regexError);
+      }
       const flags = input.caseSensitive === false ? "gi" : "g";
       const regex = createSafeRegex(input.pattern, flags);
       const matches: GrepMatch[] = [];
@@ -472,26 +475,6 @@ async function grepFile(
   }
 
   return matches;
-}
-
-function assertSafeRegexPattern(pattern: string): void {
-  if (!pattern) {
-    throw new ClientInputError("grep pattern is required");
-  }
-
-  if (pattern.length > maxGrepPatternLength) {
-    throw new ClientInputError(`grep pattern must be ${maxGrepPatternLength} characters or fewer`);
-  }
-
-  // Reject common catastrophic-backtracking shapes such as (a+)+ and (.*)*.
-  if (/(\([^)]*[+*][^)]*\))[+*{]/.test(pattern)) {
-    throw new ClientInputError("grep pattern contains an unsafe nested quantifier");
-  }
-
-  // Backreferences can make matching non-linear and are not needed for discovery search.
-  if (/\\[1-9]/.test(pattern)) {
-    throw new ClientInputError("grep pattern backreferences are not supported");
-  }
 }
 
 function createSafeRegex(pattern: string, flags: string): RegExp {

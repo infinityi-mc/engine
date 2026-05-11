@@ -1,5 +1,6 @@
 import type { LoggerPort } from "../../../shared/observability/logger.port";
 import { SchemaNotFoundError, UnsafeRegexError } from "../domain/errors/mcdoc.errors";
+import { validateRegexPattern } from "../../../shared/validation/regex-safety";
 import type { McdocLoaderPort } from "../domain/ports/mcdoc-loader.port";
 import type {
   McdocRepositoryPort,
@@ -20,7 +21,6 @@ import type {
 import { projectFieldsOnly, projectSummary } from "./projection";
 import { clampLimit, search } from "./search";
 
-const MAX_REGEX_PATTERN_LENGTH = 256;
 const DEFAULT_GREP_LIMIT = 100;
 const MAX_GREP_LIMIT = 500;
 const DEFAULT_REF_LIMIT = 100;
@@ -88,7 +88,10 @@ export class McdocRepository implements McdocRepositoryPort {
   }
 
   grepFields(pattern: string, limit?: number): readonly GrepFieldMatch[] {
-    assertSafeRegexPattern(pattern);
+    const regexError = validateRegexPattern(pattern);
+    if (regexError !== undefined) {
+      throw new UnsafeRegexError(regexError);
+    }
     let regex: RegExp;
     try {
       regex = new RegExp(pattern);
@@ -116,18 +119,5 @@ export class McdocRepository implements McdocRepositoryPort {
     const cap = clampLimit(limit, DEFAULT_REF_LIMIT, MAX_REF_LIMIT);
     const all = this.index.reverseRefs[path] ?? [];
     return all.slice(0, cap);
-  }
-}
-
-function assertSafeRegexPattern(pattern: string): void {
-  if (!pattern) throw new UnsafeRegexError("pattern is required");
-  if (pattern.length > MAX_REGEX_PATTERN_LENGTH) {
-    throw new UnsafeRegexError(`pattern must be ${MAX_REGEX_PATTERN_LENGTH} characters or fewer`);
-  }
-  if (/(\([^)]*[+*][^)]*\))[+*{]/.test(pattern)) {
-    throw new UnsafeRegexError("pattern contains an unsafe nested quantifier");
-  }
-  if (/\\[1-9]/.test(pattern)) {
-    throw new UnsafeRegexError("backreferences are not supported");
   }
 }

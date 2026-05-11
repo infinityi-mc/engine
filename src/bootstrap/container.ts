@@ -109,6 +109,14 @@ import {
   McdocFindReferencesTool,
 } from "../modules/agent/infrastructure/tools/mcdoc-tools";
 import type { McdocRepositoryPort } from "../modules/mcdoc/domain/ports/mcdoc-repository.port";
+import { PrismarineNbtAdapter } from "../modules/minecraft/infrastructure/nbt/prismarine-nbt.adapter";
+import {
+  NbtReadTool,
+  NbtGetTool,
+  NbtSearchTool,
+  NbtKeysTool,
+  NbtStructureTool,
+} from "../modules/agent/infrastructure/tools/nbt-tools";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -207,6 +215,8 @@ export async function createContainer(): Promise<AppContainer> {
   const minecraftLogListener = new MinecraftLogListener(minecraftLog, patternRegistry, eventBus, minecraftRepository, logger);
 
   patternRegistry.register("@ai", { action: "invoke_agent", payload: { agentName: "minecraft-ingame" } });
+
+  const nbtAdapter = new PrismarineNbtAdapter(logger);
 
   commandBus.register(
     CREATE_MINECRAFT_SERVER_COMMAND,
@@ -329,6 +339,11 @@ export async function createContainer(): Promise<AppContainer> {
   toolRegistry.register(new McdocGetTool(mcdocRepository, logger));
   toolRegistry.register(new McdocGrepFieldsTool(mcdocRepository, logger));
   toolRegistry.register(new McdocFindReferencesTool(mcdocRepository, logger));
+  toolRegistry.register(new NbtReadTool(nbtAdapter, logger));
+  toolRegistry.register(new NbtGetTool(nbtAdapter, logger));
+  toolRegistry.register(new NbtSearchTool(nbtAdapter, logger));
+  toolRegistry.register(new NbtKeysTool(nbtAdapter, logger));
+  toolRegistry.register(new NbtStructureTool(nbtAdapter, logger));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);
   const sessionRepository = new FileSessionRepository({

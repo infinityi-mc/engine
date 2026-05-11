@@ -2,22 +2,9 @@ import type { McdocRepositoryPort, SchemaProjection } from "../../../mcdoc/domai
 import { SchemaNotFoundError, UnsafeRegexError } from "../../../mcdoc/domain/errors/mcdoc.errors";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import type { Tool, ToolResult } from "../../domain/types/tool.types";
+import { toolError, jsonOk, asObject } from "./tool-helpers";
 
 const PROJECTION_VALUES: readonly SchemaProjection[] = ["summary", "full", "fields-only"] as const;
-
-function toolError(message: string): ToolResult {
-  return { output: message, isError: true };
-}
-
-function jsonOk(value: unknown): ToolResult {
-  return { output: JSON.stringify(value), isError: false };
-}
-
-function asObject(input: unknown): Record<string, unknown> | null {
-  return typeof input === "object" && input !== null && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : null;
-}
 
 export class McdocMetaTool implements Tool {
   readonly name = "mcdoc_meta";

@@ -2,7 +2,6 @@ import type { CommandBus } from "../../../../shared/application/command-bus";
 import type { QueryBus } from "../../../../shared/application/query-bus";
 import { jsonResponse } from "../../../../shared/http/json-response";
 import type { JwtGuard } from "../../../../shared/http/jwt-guard";
-import { getErrorMessage } from "../../../../shared/observability/error-utils";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import type { Router } from "../../../../shared/http/router";
 import { parseJson, requiredString, optionalStringArrayProperty, isRecord } from "../../../../shared/http/route-helpers";
@@ -222,10 +221,10 @@ function serializeInstance(instance: ServerInstance): Record<string, unknown> {
 function parsePatch(body: Record<string, unknown>): MinecraftServerPatch {
   let patch: MinecraftServerPatch = {};
 
-  if (typeof body.name === "string") patch = { ...patch, name: body.name };
-  if (typeof body.directory === "string") patch = { ...patch, directory: body.directory };
-  if (typeof body.javaPath === "string") patch = { ...patch, javaPath: body.javaPath };
-  if (typeof body.jarFile === "string") patch = { ...patch, jarFile: body.jarFile };
+  if (typeof body.name === "string" && body.name.length > 0) patch = { ...patch, name: body.name };
+  if (typeof body.directory === "string" && body.directory.length > 0) patch = { ...patch, directory: body.directory };
+  if (typeof body.javaPath === "string" && body.javaPath.length > 0) patch = { ...patch, javaPath: body.javaPath };
+  if (typeof body.jarFile === "string" && body.jarFile.length > 0) patch = { ...patch, jarFile: body.jarFile };
 
   const jvmArgs = optionalStringArrayProperty("jvmArgs", body.jvmArgs);
   if (jvmArgs.jvmArgs !== undefined) patch = { ...patch, jvmArgs: jvmArgs.jvmArgs };
@@ -251,10 +250,13 @@ function parsePatch(body: Record<string, unknown>): MinecraftServerPatch {
   if (Array.isArray(body.agents)) {
     patch = {
       ...patch,
-      agents: body.agents.filter(isRecord).map((a) => ({
-        id: String(a.id),
-        ...(Array.isArray(a.players) ? { players: a.players.filter((s): s is string => typeof s === "string") } : {}),
-      })),
+      agents: body.agents
+        .filter(isRecord)
+        .filter((a) => typeof a.id === "string" && a.id.length > 0)
+        .map((a) => ({
+          id: a.id as string,
+          ...(Array.isArray(a.players) ? { players: a.players.filter((s): s is string => typeof s === "string") } : {}),
+        })),
     };
   }
 
