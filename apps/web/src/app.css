@@ -102,3 +102,92 @@
 	--color-text-inverse: var(--color-text-inverse);
 	--color-text-link: var(--color-text-link);
 }
+
+/* Hover interaction variables */
+[data-theme='engine-retro'] {
+	--dl-hover-nav-background: var(--color-surface-background-alt);
+	--dl-hover-nav-text: var(--color-text-primary);
+	--dl-hover-nav-border: var(--color-primary);
+	--dl-hover-nav-shadow: none;
+	--dl-hover-nav-transform: none;
+	--dl-hover-card-border: var(--color-surface-border);
+	--dl-hover-card-shadow: var(--layout-shadows-lg);
+	--dl-hover-card-transform: translateY(-2px);
+	--dl-hover-button-shadow: var(--layout-shadows-md);
+	--dl-hover-button-transform: translateY(-1px);
+	--dl-hover-button-filter: none;
+}
+
+/* Theme-aware utility classes */
+.theme-bg { background-color: var(--color-surface-background); }
+.theme-bg-alt { background-color: var(--color-surface-background-alt); }
+.theme-bg-card { background-color: var(--color-surface-card); }
+.theme-bg-card-hover:hover { background-color: var(--color-surface-card-hover); }
+.theme-text { color: var(--color-text-primary); }
+.theme-text-secondary { color: var(--color-text-secondary); }
+.theme-text-muted { color: var(--color-text-muted); }
+.theme-text-inverse { color: var(--color-text-inverse); }
+.theme-text-link { color: var(--color-text-link); }
+.theme-text-link:hover { color: var(--color-text-link-hover); }
+.theme-border { border-color: var(--color-surface-border); }
+.theme-border-light { border-color: var(--color-surface-border-light); }
+.theme-heading { font-family: var(--font-heading-family); font-weight: var(--font-heading-weight); letter-spacing: var(--font-heading-letter-spacing); }
+.theme-body { font-family: var(--font-body-family); font-weight: var(--font-body-weight); line-height: var(--font-body-line-height); }
+.theme-mono { font-family: var(--font-mono-family); }
+.theme-radius-sm { border-radius: var(--layout-border-radius-sm); }
+.theme-radius-md { border-radius: var(--layout-border-radius-md); }
+.theme-radius-lg { border-radius: var(--layout-border-radius-lg); }
+.theme-radius-xl { border-radius: var(--layout-border-radius-xl); }
+.theme-radius-full { border-radius: var(--layout-border-radius-full); }
+.theme-shadow-sm { box-shadow: var(--layout-shadows-sm); }
+.theme-shadow-md { box-shadow: var(--layout-shadows-md); }
+.theme-shadow-lg { box-shadow: var(--layout-shadows-lg); }
+
+/* Hover interaction classes */
+.dl-hover-nav,
+.dl-hover-card,
+.dl-hover-btn {
+	transition: background-color 0.2s ease, background-image 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, filter 0.2s ease;
+}
+
+.dl-hover-nav:hover {
+	background-color: var(--dl-hover-nav-background);
+	color: var(--dl-hover-nav-text);
+	border-color: var(--dl-hover-nav-border);
+	box-shadow: var(--dl-hover-nav-shadow);
+	transform: var(--dl-hover-nav-transform);
+}
+
+.dl-hover-card:hover {
+	background-color: var(--color-surface-card-hover);
+	border-color: var(--dl-hover-card-border);
+	box-shadow: var(--dl-hover-card-shadow);
+	transform: var(--dl-hover-card-transform);
+}
+
+.dl-hover-btn:hover:not(:disabled) {
+	box-shadow: var(--dl-hover-button-shadow);
+	transform: var(--dl-hover-button-transform);
+	filter: var(--dl-hover-button-filter);
+}
+
+.dl-hover-btn:disabled {
+	box-shadow: none;
+	transform: none;
+	filter: none;
+}
+
+/* Design Language Utilities */
+.dl-card {
+	border-radius: var(--layout-border-radius-md);
+	box-shadow: var(--layout-shadows-md);
+}
+
+.dl-btn {
+	border-radius: var(--layout-border-radius-md);
+}
+
+.dl-input {
+	border: 1px solid var(--color-surface-border);
+	border-radius: var(--layout-border-radius-md);
+}
