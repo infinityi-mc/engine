@@ -16,6 +16,7 @@ export interface PlayerConfig {
 export interface AgentAccess {
   readonly id: string;
   readonly players?: string[];
+  readonly commands?: readonly string[];
 }
 
 export interface MinecraftServer {

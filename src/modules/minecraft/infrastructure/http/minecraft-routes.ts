@@ -205,7 +205,13 @@ function serializeServer(server: MinecraftServer): Record<string, unknown> {
     jvmArgs: server.jvmArgs,
     serverArgs: server.serverArgs,
     ...(server.players !== undefined ? { players: server.players } : {}),
-    ...(server.agents !== undefined ? { agents: server.agents } : {}),
+    ...(server.agents !== undefined ? {
+      agents: server.agents.map((a) => ({
+        id: a.id,
+        ...(a.players !== undefined ? { players: a.players } : {}),
+        ...(a.commands !== undefined ? { commands: a.commands } : {}),
+      })),
+    } : {}),
   };
 }
 
@@ -284,6 +290,7 @@ function parsePatch(body: Record<string, unknown>): MinecraftServerPatch {
         .map((a) => ({
           id: a.id as string,
           ...(Array.isArray(a.players) ? { players: a.players.filter((s): s is string => typeof s === "string") } : {}),
+          ...(Array.isArray(a.commands) ? { commands: a.commands.filter((s): s is string => typeof s === "string") } : {}),
         })),
     };
   }

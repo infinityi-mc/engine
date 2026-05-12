@@ -4,10 +4,14 @@ export interface ToolResult {
   metadata?: Record<string, unknown>;
 }
 
+export interface ToolContext {
+  readonly agentId: string;
+}
+
 export interface Tool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
   readonly groups?: readonly string[];
-  execute(input: unknown): Promise<ToolResult>;
+  execute(input: unknown, context?: ToolContext): Promise<ToolResult>;
 }

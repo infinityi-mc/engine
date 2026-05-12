@@ -105,7 +105,7 @@ export class ToolUseLoop {
       }
 
       // Execute tool calls in parallel
-      const toolResultMessages = await this.executeToolCalls(response.toolCalls, session.sessionId);
+      const toolResultMessages = await this.executeToolCalls(response.toolCalls, session.sessionId, definition.id);
 
       // Append tool result messages
       session.messages.push(...toolResultMessages);
@@ -133,9 +133,10 @@ export class ToolUseLoop {
   private async executeToolCalls(
     toolCalls: ToolCall[],
     sessionId: string,
+    agentId: string,
   ): Promise<ChatMessage[]> {
     const results = await Promise.allSettled(
-      toolCalls.map((call) => this.executeSingleToolCall(call, sessionId)),
+      toolCalls.map((call) => this.executeSingleToolCall(call, sessionId, agentId)),
     );
 
     const messages: ChatMessage[] = [];
@@ -176,6 +177,7 @@ export class ToolUseLoop {
   private async executeSingleToolCall(
     call: ToolCall,
     sessionId: string,
+    agentId: string,
   ): Promise<{ output: string; isError?: boolean }> {
     const toolName = call.function.name;
     const tool = this.deps.toolRegistry.get(toolName);
@@ -207,7 +209,7 @@ export class ToolUseLoop {
       toolName,
     });
 
-    return await tool.execute(input);
+    return await tool.execute(input, { agentId });
   }
 
   private buildResult(session: AgentSession, stopReason: string): AgentRunResult {

@@ -121,6 +121,7 @@ import {
   NbtKeysTool,
   NbtStructureTool,
 } from "../modules/agent/infrastructure/tools/nbt-tools";
+import { SendMinecraftCommandsTool } from "../modules/agent/infrastructure/tools/send-minecraft-commands.tool";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -354,6 +355,7 @@ export async function createContainer(): Promise<AppContainer> {
   toolRegistry.register(new NbtKeysTool(nbtAdapter, logger));
   toolRegistry.register(new NbtStructureTool(nbtAdapter, logger));
   toolRegistry.register(new MinecraftMetadataTool(queryBus, logger));
+  toolRegistry.register(new SendMinecraftCommandsTool(minecraftRepository, minecraftStdin, minecraftLog, serverRegistry, logger));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);
   const sessionRepository = new FileSessionRepository({

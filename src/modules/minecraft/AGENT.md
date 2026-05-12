@@ -33,6 +33,18 @@ Five agent tools for reading NBT data, registered under group `nbt`:
 
 The `PrismarineNbtAdapter` uses the `prismarine-nbt` library which handles GZip/Zlib decompression and Java/Bedrock format auto-detection.
 
+### Command Tools (Agent)
+
+Agent tool for sending commands to a running server, registered under group `minecraft`:
+
+| Tool | Name | Parameters | Description |
+|------|------|------------|-------------|
+| `SendMinecraftCommandsTool` | `send_minecraft_commands` | `serverId`, `commands[]` | Send commands to server stdin, capture log feedback (0.5s window per command). Max 16 commands per call. |
+
+**Guardrails:** Per-agent command blacklist configured in `MinecraftServer.agents[].commands`. Uses `startsWith` matching — commands starting with any listed prefix are blocked. Default: no restrictions (all commands allowed).
+
+**Feedback capture:** Subscribes to `MinecraftLogPort.onLogLine` before sending each command, collects lines for 500ms, then unsubscribes. May capture unrelated log noise — the LLM can filter.
+
 ## API Verification (JWT + Scopes)
 
 All Minecraft HTTP endpoints require JWT authentication. The `JwtGuard` wraps each route handler.
