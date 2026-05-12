@@ -69,7 +69,7 @@ Defined in `src/modules/minecraft/infrastructure/http/scopes.ts`:
 | Method | Path | Scope | Status Codes |
 |--------|------|-------|-------------|
 | POST | `/minecraft/servers` | `minecraft:server:write` | `201` created, `409` already exists |
-| PATCH | `/minecraft/servers/:id` | `minecraft:server:write` | `200` updated, `404` not found, `409` server running |
+| PATCH | `/minecraft/servers/:id` | `minecraft:server:write` | `200` updated, `404` not found, `409` spawn-affecting fields while running |
 | GET | `/minecraft/servers` | `minecraft:server:read` | `200` list |
 | GET | `/minecraft/servers/:id` | `minecraft:server:read` | `200` details |
 | DELETE | `/minecraft/servers/:id` | `minecraft:server:write` | `200` ok, `404` not found |

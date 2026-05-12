@@ -34,6 +34,10 @@ import { GetMinecraftServerQuery } from "../../src/modules/minecraft/application
 import { MinecraftServerAlreadyExistsError } from "../../src/modules/minecraft/domain/errors/minecraft-server-already-exists.error";
 import { MinecraftServerNotFoundError } from "../../src/modules/minecraft/domain/errors/minecraft-server-not-found.error";
 import { MinecraftServerNotRunningError } from "../../src/modules/minecraft/domain/errors/minecraft-server-not-running.error";
+import { MinecraftServerRunningError } from "../../src/modules/minecraft/domain/errors/minecraft-server-running.error";
+import { UpdateMinecraftServerHandler } from "../../src/modules/minecraft/application/commands/update-minecraft-server.handler";
+import { UpdateMinecraftServerCommand } from "../../src/modules/minecraft/application/commands/update-minecraft-server.command";
+import type { LogListenerPort } from "../../src/modules/minecraft/domain/ports/log-listener.port";
 import { noopLogger } from "../../src/shared/observability/logger.port";
 import type { MinecraftServer } from "../../src/modules/minecraft/domain/types/minecraft-server";
 
@@ -52,6 +56,8 @@ describe("minecraft module", () => {
   let sendCommandHandler: SendMinecraftCommandHandler;
   let listHandler: ListMinecraftServersHandler;
   let getHandler: GetMinecraftServerHandler;
+  let updateHandler: UpdateMinecraftServerHandler;
+  let mockLogListener: LogListenerPort & { refreshConfigCalls: string[] };
 
   const testServer: MinecraftServer = {
     id: "test-vanilla",
@@ -87,6 +93,14 @@ describe("minecraft module", () => {
     const minecraftWaitForExit = waitForProcessExit(serverProcess);
     const noopPatternRegistry = new InMemoryPatternRegistryAdapter();
     const noopLogListener = new MinecraftLogListener(minecraftLog, noopPatternRegistry, new EventBus(), minecraftRepository, noopLogger);
+    mockLogListener = {
+      startListening: noopLogListener.startListening.bind(noopLogListener),
+      stopListening: noopLogListener.stopListening.bind(noopLogListener),
+      refreshConfigCalls: [] as string[],
+      async refreshConfig(serverId: string) {
+        mockLogListener.refreshConfigCalls.push(serverId);
+      },
+    };
     // Use a short timeout for tests since test processes don't respond to /stop
     const testWaitForExit = (instanceId: string, _timeoutMs: number) =>
       minecraftWaitForExit(instanceId, 500);
@@ -100,6 +114,7 @@ describe("minecraft module", () => {
     sendCommandHandler = new SendMinecraftCommandHandler(minecraftRepository, serverRegistry, minecraftStdin);
     listHandler = new ListMinecraftServersHandler(minecraftRepository);
     getHandler = new GetMinecraftServerHandler(minecraftRepository, serverRegistry);
+    updateHandler = new UpdateMinecraftServerHandler(minecraftRepository, serverRegistry, mockLogListener);
   });
 
   afterEach(async () => {
@@ -568,5 +583,228 @@ describe("minecraft module", () => {
 
     await rm(pidDir2, { recursive: true, force: true });
     await rm(dataDir2, { recursive: true, force: true });
+  });
+
+  // --- Update ---
+
+  test("updates name while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    const updated = await updateHandler.handle(new UpdateMinecraftServerCommand("long-running", { name: "Updated Name" }));
+    expect(updated.name).toBe("Updated Name");
+  });
+
+  test("updates players while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    const updated = await updateHandler.handle(new UpdateMinecraftServerCommand("long-running", {
+      players: { teams: { prefix: ["[Admin]"], suffix: [] } },
+    }));
+    expect(updated.players?.teams?.prefix).toEqual(["[Admin]"]);
+  });
+
+  test("updates agents while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    const updated = await updateHandler.handle(new UpdateMinecraftServerCommand("long-running", {
+      agents: [{ id: "general", players: ["steve"] }],
+    }));
+    expect(updated.agents).toEqual([{ id: "general", players: ["steve"] }]);
+  });
+
+  test("rejects directory update while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    await expect(
+      updateHandler.handle(new UpdateMinecraftServerCommand("long-running", { directory: "/new/path" })),
+    ).rejects.toThrow(MinecraftServerRunningError);
+  });
+
+  test("rejects javaPath update while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    await expect(
+      updateHandler.handle(new UpdateMinecraftServerCommand("long-running", { javaPath: "/new/java" })),
+    ).rejects.toThrow(MinecraftServerRunningError);
+  });
+
+  test("rejects jarFile update while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    await expect(
+      updateHandler.handle(new UpdateMinecraftServerCommand("long-running", { jarFile: "new.jar" })),
+    ).rejects.toThrow(MinecraftServerRunningError);
+  });
+
+  test("rejects jvmArgs update while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    await expect(
+      updateHandler.handle(new UpdateMinecraftServerCommand("long-running", { jvmArgs: ["-Xmx4G"] })),
+    ).rejects.toThrow(MinecraftServerRunningError);
+  });
+
+  test("rejects serverArgs update while server is running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    await expect(
+      updateHandler.handle(new UpdateMinecraftServerCommand("long-running", { serverArgs: ["--nogui", "--demo"] })),
+    ).rejects.toThrow(MinecraftServerRunningError);
+  });
+
+  test("rejects mixed safe + spawn-affecting fields while running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    await expect(
+      updateHandler.handle(new UpdateMinecraftServerCommand("long-running", {
+        name: "New Name",
+        javaPath: "/new/java",
+      })),
+    ).rejects.toThrow(MinecraftServerRunningError);
+  });
+
+  test("refreshes log listener config when players is updated while running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    mockLogListener.refreshConfigCalls = [];
+    await updateHandler.handle(new UpdateMinecraftServerCommand("long-running", {
+      players: { teams: { prefix: ["[Mod]"], suffix: [] } },
+    }));
+
+    expect(mockLogListener.refreshConfigCalls).toEqual(["long-running"]);
+  });
+
+  test("does not refresh log listener config when only agents is updated while running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    mockLogListener.refreshConfigCalls = [];
+    await updateHandler.handle(new UpdateMinecraftServerCommand("long-running", {
+      agents: [{ id: "general", players: [] }],
+    }));
+
+    expect(mockLogListener.refreshConfigCalls).toEqual([]);
+  });
+
+  test("does not refresh log listener config when only name is updated while running", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(longRunningServer));
+    const instance = await serverProcess.spawn({
+      id: "long-running",
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 60000)"],
+      cwd: ".",
+    });
+    await serverRegistry.register(instance);
+
+    mockLogListener.refreshConfigCalls = [];
+    await updateHandler.handle(new UpdateMinecraftServerCommand("long-running", { name: "New Name" }));
+
+    expect(mockLogListener.refreshConfigCalls).toEqual([]);
+  });
+
+  test("allows all field updates when server is stopped", async () => {
+    await createHandler.handle(new CreateMinecraftServerCommand(testServer));
+
+    const updated = await updateHandler.handle(new UpdateMinecraftServerCommand("test-vanilla", {
+      name: "New Name",
+      directory: "/new/dir",
+      javaPath: "/new/java",
+      jarFile: "new.jar",
+      jvmArgs: ["-Xmx4G"],
+      serverArgs: ["--nogui", "--demo"],
+      players: { teams: { prefix: ["[Admin]"], suffix: [] } },
+      agents: [{ id: "general", players: ["steve"] }],
+    }));
+
+    expect(updated.name).toBe("New Name");
+    expect(updated.directory).toBe("/new/dir");
+    expect(updated.javaPath).toBe("/new/java");
+    expect(updated.jarFile).toBe("new.jar");
+    expect(updated.jvmArgs).toEqual(["-Xmx4G"]);
+    expect(updated.serverArgs).toEqual(["--nogui", "--demo"]);
+    expect(updated.players?.teams?.prefix).toEqual(["[Admin]"]);
+    expect(updated.agents).toEqual([{ id: "general", players: ["steve"] }]);
+  });
+
+  test("update throws MinecraftServerNotFoundError for unknown server", async () => {
+    await expect(
+      updateHandler.handle(new UpdateMinecraftServerCommand("nonexistent", { name: "X" })),
+    ).rejects.toThrow(MinecraftServerNotFoundError);
   });
 });

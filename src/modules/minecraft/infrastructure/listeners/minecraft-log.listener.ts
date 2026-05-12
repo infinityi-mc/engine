@@ -62,6 +62,26 @@ export class MinecraftLogListener implements LogListenerPort {
     }
   }
 
+  async refreshConfig(serverId: string): Promise<void> {
+    if (!this.unsubs.has(serverId)) return;
+
+    const server = await this.repository.get(serverId);
+    if (server !== undefined) {
+      this.teamConfigs.set(serverId, {
+        prefixes: server.players?.teams?.prefix ?? [],
+        suffixes: server.players?.teams?.suffix ?? [],
+      });
+    } else {
+      this.teamConfigs.delete(serverId);
+    }
+
+    this.logger.info("minecraft.log_listener.config_refreshed", {
+      module: "minecraft",
+      operation: "log_listener.refresh_config",
+      serverId,
+    });
+  }
+
   private processLine(serverId: string, line: string): void {
     const chatMatch = CHAT_PREFIX_RE.exec(line);
     if (!chatMatch) return;

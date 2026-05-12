@@ -229,7 +229,7 @@ export async function createContainer(): Promise<AppContainer> {
   );
   commandBus.register(
     UPDATE_MINECRAFT_SERVER_COMMAND,
-    new UpdateMinecraftServerHandler(minecraftRepository, serverRegistry),
+    new UpdateMinecraftServerHandler(minecraftRepository, serverRegistry, minecraftLogListener),
   );
   commandBus.register(
     START_MINECRAFT_SERVER_COMMAND,
