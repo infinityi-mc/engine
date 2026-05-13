@@ -13,6 +13,7 @@ The module covers:
 - Predefined agent definitions loaded from `config.json`
 - Tool-use loop runtime (multi-step reasoning with tool calling)
 - Single-shot runtime (one LLM call, no tools)
+- Declarative context injection via PromptBuilder (server, player, timestamp)
 - In-memory sessions (no persistence)
 - Tool registry for resolving tool names to implementations
 - HTTP routes for running agents and listing definitions
@@ -37,6 +38,7 @@ application/
   runtime/
     tool-use-loop.ts            # ToolUseLoop (multi-step reasoning loop)
     single-shot.ts              # SingleShotRuntime (one-shot, no tools)
+  prompt-builder.ts             # PromptBuilder (system prompt context injection)
 domain/
   types/
     agent.types.ts              # AgentDefinition, AgentSession, AgentRunResult
@@ -69,9 +71,10 @@ infrastructure/
 `AgentService` is the orchestration entry point. It:
 1. Looks up the agent definition from the repository
 2. Creates an in-memory session with system prompt + user message
-3. Selects the runtime strategy (tool-use-loop or single-shot)
-4. Delegates to the runtime
-5. Returns an `AgentRunResult`
+3. Assembles the system prompt via `PromptBuilder` using optional `InvocationContext`
+4. Selects the runtime strategy (tool-use-loop or single-shot)
+5. Delegates to the runtime
+6. Returns an `AgentRunResult`
 
 `ToolUseLoop` is the core multi-step reasoning engine. It:
 1. Converts agent's tool names → `ToolDefinition[]` via the registry
@@ -109,6 +112,9 @@ infrastructure/
   maxIterations?: number;        // safety limit for reasoning loop
   temperature?: number;          // LLM temperature
   maxTokens?: number;            // max tokens per LLM response
+  context?: Array<{              // declarative context blocks
+    type: "server" | "player" | "timestamp";
+  }>;
 }
 ```
 
@@ -213,6 +219,31 @@ Tool execution errors are **not** stop conditions. When a tool fails, the error 
 
 All error recovery is LLM-driven. The runtime's job is to report errors accurately and let the LLM decide the next step.
 
+## Context Injection
+
+The `PromptBuilder` centralizes the assembly of system prompts. It allows agents to declare which environmental context blocks they need.
+
+### Supported Blocks
+
+| Block | Type | Required Data | Description |
+|-------|------|---------------|-------------|
+| **Current Server** | `server` | `serverId` | Injects server ID and Name (if found in registry) |
+| **Calling Player** | `player` | `playerName` | Injects the name of the player invoking the agent |
+| **Current Time** | `timestamp` | (none) | Injects the current ISO timestamp |
+
+### Invocation Context
+
+When calling `AgentService.run()`, an `InvocationContext` object can be provided:
+
+```typescript
+{
+  serverId?: string;
+  playerName?: string;
+}
+```
+
+If a declared block lacks its required data (e.g., `server` block without `serverId`), it is silently skipped to allow the prompt to degrade gracefully. All context values are sanitized to prevent prompt injection attacks (stripping newlines and control characters).
+
 ## Configuration
 
 Agent configuration is an optional section in `config.json`:
@@ -267,7 +298,11 @@ Request body:
   "agentId": "code-reviewer",
   "message": "Review the changes in src/main.ts",
   "maxIterations": 5,
-  "timeoutMs": 60000
+  "timeoutMs": 60000,
+  "context": {
+    "serverId": "vanilla",
+    "playerName": "Steve"
+  }
 }
 ```
 
