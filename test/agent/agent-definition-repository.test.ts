@@ -41,13 +41,13 @@ function makeFakeConfig(agentConfig?: AppConfig["agent"]): FakeConfigPort {
   return {
     getConfig: (): AppConfig => ({
       llm: { defaultProvider: "test", defaultModel: "test-model", providers: {} },
-      audioPlayer: { maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32 },
+      audioPlayer: { maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32, searchLimit: 5 },
       ...(currentAgentConfig ? { agent: currentAgentConfig } : {}),
     }),
     getLlmConfig: () => ({ defaultProvider: "test", defaultModel: "test-model", providers: {} }),
     getAgentConfig: () => currentAgentConfig,
     getMinecraftAgentConfig: () => ({ messageCap: 50, sessionTtlMs: 172_800_000, playerCooldownMs: 5_000 }),
-    getAudioPlayerConfig: () => ({ maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32 }),
+    getAudioPlayerConfig: () => ({ maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32, searchLimit: 5 }),
     getApiKey: () => "",
     getBaseUrl: () => "",
     onChange: (listener: (config: AppConfig) => void) => {
@@ -62,7 +62,7 @@ function makeFakeConfig(agentConfig?: AppConfig["agent"]): FakeConfigPort {
       currentAgentConfig = newAgentConfig;
       const newConfig: AppConfig = {
         llm: { defaultProvider: "test", defaultModel: "test-model", providers: {} },
-        audioPlayer: { maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32 },
+        audioPlayer: { maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32, searchLimit: 5 },
         ...(newAgentConfig ? { agent: newAgentConfig } : {}),
       };
       for (const listener of listeners) {

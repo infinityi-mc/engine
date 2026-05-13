@@ -3,4 +3,5 @@ export const AUDIO_PLAYER_DEFAULTS = {
   downloadFormat: "mp3",
   maxPlayerRequest: 20,
   playbackRange: 32,
+  searchLimit: 5,
 } as const;

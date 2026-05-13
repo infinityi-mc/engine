@@ -49,7 +49,6 @@ export interface DownloadMusicInput {
   readonly requestedPlayer?: string;
 }
 
-const DEFAULT_SEARCH_LIMIT = 10;
 const DEFAULT_LIST_LIMIT = 10;
 const AUDIO_FORMAT_FLAG = "bestaudio/best";
 const PLAYER_NAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
@@ -60,7 +59,8 @@ export class AudioPlayerService {
   constructor(private readonly deps: AudioPlayerDependencies) {}
 
   async searchMusic(query: string): Promise<readonly YoutubeSearchVideo[]> {
-    return this.deps.youtube.search({ query, options: { limit: DEFAULT_SEARCH_LIMIT } });
+    const config = this.deps.config.getAudioPlayerConfig();
+    return this.deps.youtube.search({ query, options: { limit: config.searchLimit } });
   }
 
   async downloadMusic(input: DownloadMusicInput): Promise<AudioTrack> {
@@ -75,7 +75,7 @@ export class AudioPlayerService {
 
     const config = this.deps.config.getAudioPlayerConfig();
     const trackId = randomUUID();
-    const outputDir = path.join(server.directory, metadata.levelName, "audioplayer");
+    const outputDir = path.join(server.directory, metadata.levelName, "audio_player_data");
     const outputPath = path.join(outputDir, `${trackId}.${config.downloadFormat}`);
     const videoMetadata = await this.deps.youtube.getMetadata({ url: input.url });
 

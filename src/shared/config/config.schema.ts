@@ -55,6 +55,7 @@ const AudioPlayerConfigSchema = z.object({
   downloadFormat: z.string().min(1).default(AUDIO_PLAYER_DEFAULTS.downloadFormat),
   maxPlayerRequest: z.number().positive().default(AUDIO_PLAYER_DEFAULTS.maxPlayerRequest),
   playbackRange: z.number().positive().default(AUDIO_PLAYER_DEFAULTS.playbackRange),
+  searchLimit: z.number().positive().default(AUDIO_PLAYER_DEFAULTS.searchLimit),
 });
 
 export const ConfigSchema = z.object({

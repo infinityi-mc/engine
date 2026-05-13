@@ -20,12 +20,12 @@ function makeFakeConfig(defaultProvider = "openai", defaultModel = "gpt-4o"): Co
   return {
     getConfig: () => ({
       llm: { defaultProvider, defaultModel, providers: {} },
-      audioPlayer: { maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32 },
+      audioPlayer: { maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32, searchLimit: 5 },
     }),
     getLlmConfig: () => ({ defaultProvider, defaultModel, providers: {} }),
     getAgentConfig: () => undefined,
     getMinecraftAgentConfig: () => ({ messageCap: 50, sessionTtlMs: 172_800_000, playerCooldownMs: 5_000 }),
-    getAudioPlayerConfig: () => ({ maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32 }),
+    getAudioPlayerConfig: () => ({ maxDownloadSize: 15 * 1024 * 1024, downloadFormat: "mp3", maxPlayerRequest: 20, playbackRange: 32, searchLimit: 5 }),
     getApiKey: () => "",
     getBaseUrl: () => "",
     onChange: () => () => {},

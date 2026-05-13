@@ -39,7 +39,7 @@ function fakeTrack(overrides: Partial<AudioTrack> = {}): AudioTrack {
     tags: [],
     artist: "Artist",
     levelName: "world",
-    path: "/srv/minecraft/world/audioplayer/track-1.mp3",
+    path: "/srv/minecraft/world/audio_player_data/track-1.mp3",
     isPlaying: false,
     dateAdded: "2026-01-01T00:00:00.000Z",
     size: 1024,
