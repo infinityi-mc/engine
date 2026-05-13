@@ -1,59 +1,96 @@
-# Mcdoc Module Notes
+# Mcdoc Module
 
-This module loads the Minecraft `symbol.json` schema registry, builds a persisted derived index, and serves read-only queries over the 1,821 schemas — for both HTTP clients and agent tools.
+## Purpose
 
-## Layout
+Provides read-only search, browsing, projection, and reverse-reference lookup over the Minecraft mcdoc schema registry.
 
-- `domain/` — `McdocRepositoryPort`, `McdocLoaderPort`, `mcdoc.types.ts`, errors (`SchemaNotFoundError`, `UnsafeRegexError`).
-- `application/` — pure `indexer.ts`, `search.ts`, `projection.ts`; `McdocRepository` orchestrates them with the loader; CQRS query/handler pairs under `queries/`.
-- `infrastructure/persistence/file-mcdoc-loader.ts` — reads `data/minecraft/symbol.json`, loads or builds the sidecar derived index at `data/minecraft/mcdoc-index/<ref>/index.json`.
-- `infrastructure/http/` — `scopes.ts` (`mcdoc:read`) + `mcdoc-routes.ts`.
+## Domain Model
 
-## Index lifecycle
+types:
+  `RawMcdocDocument`   `domain/types/mcdoc.types.ts`
+  `RawSchemaEntry`     `domain/types/mcdoc.types.ts`
+  `DerivedIndex`       `domain/types/mcdoc.types.ts`
+  `McdocMeta`          `domain/types/mcdoc.types.ts`
+  `PackageListing`     `domain/types/mcdoc.types.ts`
+  `SchemaSummary`      `domain/types/mcdoc.types.ts`
+  `SchemaFieldsOnly`   `domain/types/mcdoc.types.ts`
+  `SearchHit`          `domain/types/mcdoc.types.ts`
+  `GrepFieldMatch`     `domain/types/mcdoc.types.ts`
 
-`createContainer()` is async because the index must be ready before any request. On startup:
+errors:
+  `SchemaNotFoundError`   `domain/errors/mcdoc.errors.ts`
+  `UnsafeRegexError`      `domain/errors/mcdoc.errors.ts`
 
-1. Read `data/minecraft/symbol.json` and validate shape.
-2. If `data/minecraft/mcdoc-index/<ref>/index.json` exists and matches `ref` + `schemaCount`, load it from disk.
-3. Otherwise, build the index in-memory and persist it (best-effort — persistence failure is logged but does not block startup).
+## Ports
 
-The persisted index is purely derived from `symbol.json`; deleting `mcdoc-index/` simply triggers a rebuild on next boot.
+inbound:
+  `McdocRepositoryPort`   `domain/ports/mcdoc-repository.port.ts`
 
-## Tools
+outbound:
+  `McdocLoaderPort`      `domain/ports/mcdoc-loader.port.ts`
+  adapters:
+    `FileMcdocLoader`    `infrastructure/persistence/file-mcdoc-loader.ts`
 
-Six agent tools registered in `container.ts`:
+## Queries
 
-| Tool | Purpose |
-|------|---------|
-| `mcdoc_meta` | Returns `{ ref, schemaCount, builtAt }`. |
-| `mcdoc_list_packages` | Lists immediate sub-packages + leaf schemas under a prefix. |
-| `mcdoc_search` | Ranked search across path + field keys + descriptions. |
-| `mcdoc_get` | Fetch a schema (`summary` / `full` / `fields-only` projection). |
-| `mcdoc_grep_fields` | Find schemas with field keys matching a regex. |
-| `mcdoc_find_references` | Reverse-reference lookup. |
+| Query | Handler | Returns |
+|-------|---------|---------|
+| `mcdoc.meta` | `application/queries/mcdoc-meta.query.ts` | `McdocMeta` |
+| `mcdoc.packages.list` | `application/queries/list-mcdoc-packages.query.ts` | `PackageListing` |
+| `mcdoc.search` | `application/queries/search-mcdoc.query.ts` | `SearchHit[]` |
+| `mcdoc.schema.get` | `application/queries/get-mcdoc-schema.query.ts` | schema projection |
+| `mcdoc.fields.grep` | `application/queries/grep-mcdoc-fields.query.ts` | `GrepFieldMatch[]` |
+| `mcdoc.references.find` | `application/queries/find-mcdoc-references.query.ts` | `string[]` |
 
-## HTTP
+## HTTP Routes
 
-All routes are `GET` under scope `mcdoc:read`:
+routes: `infrastructure/http/mcdoc-routes.ts`
+scope: `mcdoc:read`
 
-| Path | Description |
-|------|-------------|
-| `/mcdoc/meta` | Index metadata. |
-| `/mcdoc/packages?prefix=...` | Package listing. |
-| `/mcdoc/search?q=...&kind=...&package=...&limit=...` | Ranked search. |
-| `/mcdoc/schemas/:path?projection=...` | Fetch one schema (`:path` is URL-encoded FQN). |
-| `/mcdoc/fields?pattern=...&limit=...` | Regex-based field key search. |
-| `/mcdoc/schemas/:path/references?limit=...` | Reverse references. |
+- `GET /mcdoc/meta`
+- `GET /mcdoc/packages?prefix=...`
+- `GET /mcdoc/search?q=...&kind=...&package=...&limit=...`
+- `GET /mcdoc/schemas/:path?projection=summary|full|fields-only`; `:path` is URL-encoded FQN.
+- `GET /mcdoc/fields?pattern=...&limit=...`
+- `GET /mcdoc/schemas/:path/references?limit=...`; `:path` is URL-encoded FQN.
 
-Errors map: `SchemaNotFoundError` → 404, `UnsafeRegexError` → 400.
+## Repository Rules
 
-## Limits
+- `McdocRepository.create(loader, logger)` loads raw schema data and a derived index at startup.
+- `FileMcdocLoader` reads `data/minecraft/symbol.json` by default via `src/bootstrap/container.ts`.
+- Missing `symbol.json` returns an empty index and logs `mcdoc.symbol_file.missing`.
+- Derived indexes are persisted at `data/minecraft/mcdoc-index/<ref>/index.json` and reused when `ref` and schema count match.
+- `getSchema` projections are `summary`, `full`, and `fields-only`; default HTTP projection is `summary`.
+- `full` returns the raw schema entry verbatim; do not mutate it.
+- `grepFields` validates patterns with `shared/validation/regex-safety.ts`; default limit `100`, max `500`.
+- `findReferences` requires the target path to exist; default limit `100`, max `500`.
+- Search tokenizes path/name, field keys, and descriptions; default limit `20`, max `100`.
 
-- Search `limit` ≤ 100 (default 20).
-- `grepFields.limit` ≤ 500 (default 100).
-- `findReferences.limit` ≤ 500 (default 100).
-- Regex pattern length ≤ 256 chars; nested quantifiers and backreferences rejected (same ReDoS guard as system `grep`).
+## Indexing
 
-## Versioning
+`application/indexer.ts` builds:
 
-Single active version. The `ref` from `symbol.json` is exposed via `mcdoc_meta` and the `/mcdoc/meta` endpoint. To upgrade, replace `symbol.json`; the index rebuilds automatically on next startup.
+- package hierarchy and schemas by package prefix
+- name/path token index
+- field-key index
+- description token index
+- reverse reference index from nested reference types
+- schema kind cache
+
+## Dependencies
+
+consumes:
+  `LoggerPort`    `../../shared/observability/logger.port.ts`
+  `QueryBus`      `../../shared/application/query-bus.ts`
+  `JwtGuard`      `../../shared/http/jwt-guard.ts`
+
+consumed-by:
+  `agent` module mcdoc tools in `../agent/infrastructure/tools/mcdoc-tools.ts`
+
+## Tests
+
+`../../../test/mcdoc/mcdoc-repository.test.ts`
+`../../../test/mcdoc/mcdoc-routes.test.ts`
+`../../../test/mcdoc/search.test.ts`
+`../../../test/mcdoc/projection.test.ts`
+`../../../test/mcdoc/mcdoc-tools.test.ts`
