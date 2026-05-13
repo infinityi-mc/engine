@@ -71,7 +71,8 @@ export function loadConfig(input: ConfigLoaderInput): ConfigLoaderResult {
   }
 
   const config = resolveEnvVars(parsed.data);
-  return { config, rawConfig };
+  const merged = mergeDefaultProviders(config);
+  return { config: merged, rawConfig };
 }
 
 function resolveEnvVars(config: AppConfig): AppConfig {
@@ -96,6 +97,31 @@ function resolveEnvVars(config: AppConfig): AppConfig {
       providers: resolvedProviders,
     },
     ...(config.agent ? { agent: config.agent } : {}),
+  };
+}
+
+function mergeDefaultProviders(config: AppConfig): AppConfig {
+  const defaultResolved: AppConfig["llm"]["providers"] = {};
+
+  for (const [name, provider] of Object.entries(DEFAULT_CONFIG.llm.providers)) {
+    const envValue = Bun.env[provider.apiKey];
+    if (envValue) {
+      defaultResolved[name] = {
+        apiKey: envValue,
+        baseUrl: provider.baseUrl,
+      };
+    }
+  }
+
+  return {
+    ...config,
+    llm: {
+      ...config.llm,
+      providers: {
+        ...defaultResolved,
+        ...config.llm.providers,
+      },
+    },
   };
 }
 

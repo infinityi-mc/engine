@@ -180,4 +180,64 @@ describe("config-loader", () => {
       else Bun.env.TEST_KEY_B = originalB;
     }
   });
+
+  test("merges default providers when user config omits them", async () => {
+    const configPath = await writeConfig({
+      llm: {
+        defaultProvider: "anthropic",
+        defaultModel: "claude-3-sonnet",
+        providers: {
+          custom: { apiKey: "CUSTOM_KEY", baseUrl: "https://custom.example.com" },
+        },
+      },
+    });
+
+    const origCustom = Bun.env.CUSTOM_KEY;
+    const origAnthropic = Bun.env.ANTHROPIC_API_KEY;
+    const origOpenai = Bun.env.OPENAI_API_KEY;
+    const origGoogle = Bun.env.GOOGLE_API_KEY;
+    Bun.env.CUSTOM_KEY = "custom-value";
+    Bun.env.ANTHROPIC_API_KEY = "anthropic-value";
+    delete Bun.env.OPENAI_API_KEY;
+    delete Bun.env.GOOGLE_API_KEY;
+    try {
+      const { config } = loadConfig({ configPath });
+      expect(config.llm.providers.custom?.apiKey).toBe("custom-value");
+      expect(config.llm.providers.anthropic?.apiKey).toBe("anthropic-value");
+      expect(config.llm.providers.anthropic?.baseUrl).toBe("https://api.anthropic.com");
+      expect(config.llm.providers.openai).toBeUndefined();
+    } finally {
+      if (origCustom === undefined) delete Bun.env.CUSTOM_KEY;
+      else Bun.env.CUSTOM_KEY = origCustom;
+      if (origAnthropic === undefined) delete Bun.env.ANTHROPIC_API_KEY;
+      else Bun.env.ANTHROPIC_API_KEY = origAnthropic;
+      if (origOpenai === undefined) delete Bun.env.OPENAI_API_KEY;
+      else Bun.env.OPENAI_API_KEY = origOpenai;
+      if (origGoogle === undefined) delete Bun.env.GOOGLE_API_KEY;
+      else Bun.env.GOOGLE_API_KEY = origGoogle;
+    }
+  });
+
+  test("user-configured provider overrides default provider", async () => {
+    const configPath = await writeConfig({
+      llm: {
+        defaultProvider: "anthropic",
+        defaultModel: "claude-3-sonnet",
+        providers: {
+          anthropic: { apiKey: "CUSTOM_ANTHROPIC_KEY", baseUrl: "https://custom-anthropic.example.com" },
+        },
+      },
+    });
+
+    const origKey = Bun.env.CUSTOM_ANTHROPIC_KEY;
+    Bun.env.CUSTOM_ANTHROPIC_KEY = "custom-anthropic-value";
+    try {
+      const { config } = loadConfig({ configPath });
+      expect(config.llm.providers.anthropic?.apiKey).toBe("custom-anthropic-value");
+      expect(config.llm.providers.anthropic?.baseUrl).toBe("https://custom-anthropic.example.com");
+    } finally {
+      if (origKey === undefined) delete Bun.env.CUSTOM_ANTHROPIC_KEY;
+      else Bun.env.CUSTOM_ANTHROPIC_KEY = origKey;
+    }
+  });
 });
