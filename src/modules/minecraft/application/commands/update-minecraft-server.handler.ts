@@ -61,5 +61,6 @@ function applyPatch(server: MinecraftServer, patch: MinecraftServerPatch): Minec
     serverArgs: patch.serverArgs ?? server.serverArgs,
     ...(patch.players !== undefined ? { players: patch.players } : server.players !== undefined ? { players: server.players } : {}),
     ...(patch.agents !== undefined ? { agents: patch.agents } : server.agents !== undefined ? { agents: server.agents } : {}),
+    ...(patch.features !== undefined ? { features: patch.features } : server.features !== undefined ? { features: server.features } : {}),
   };
 }

@@ -60,6 +60,10 @@ export class ConfigAdapter implements ConfigPort {
     };
   }
 
+  getAudioPlayerConfig(): NonNullable<AppConfig["audioPlayer"]> {
+    return this.config.audioPlayer;
+  }
+
   getApiKey(provider: string): string {
     const p = this.config.llm.providers[provider];
     if (!p) {

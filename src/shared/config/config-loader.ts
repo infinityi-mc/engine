@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
+import { AUDIO_PLAYER_DEFAULTS } from "./config-defaults";
 import { ConfigSchema } from "./config.schema";
 import type { AppConfig } from "./config.types";
 
@@ -32,6 +33,7 @@ const DEFAULT_CONFIG: AppConfig = {
       },
     },
   },
+  audioPlayer: AUDIO_PLAYER_DEFAULTS,
 };
 
 export function loadConfig(input: ConfigLoaderInput): ConfigLoaderResult {
@@ -97,6 +99,8 @@ function resolveEnvVars(config: AppConfig): AppConfig {
       providers: resolvedProviders,
     },
     ...(config.agent ? { agent: config.agent } : {}),
+    ...(config.minecraft ? { minecraft: config.minecraft } : {}),
+    audioPlayer: config.audioPlayer,
   };
 }
 
@@ -144,6 +148,8 @@ function resolveDefaults(): ConfigLoaderResult {
         ...DEFAULT_CONFIG.llm,
         providers: resolvedProviders,
       },
+      audioPlayer: DEFAULT_CONFIG.audioPlayer,
+      minecraft: {},
     },
     rawConfig: DEFAULT_CONFIG,
   };

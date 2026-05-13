@@ -6,6 +6,7 @@ import { registerServerRoutes } from "./modules/server/infrastructure/http/serve
 import { registerMinecraftRoutes } from "./modules/minecraft/infrastructure/http/minecraft-routes";
 import { registerAgentRoutes } from "./modules/agent/infrastructure/http/agent-routes";
 import { registerMcdocRoutes } from "./modules/mcdoc/infrastructure/http/mcdoc-routes";
+import { registerAudioPlayerRoutes } from "./modules/audioplayer/infrastructure/http/audioplayer-routes";
 
 const port = Number(Bun.env.PORT ?? 3000);
 const hostname = Bun.env.HOST ?? "localhost";
@@ -45,6 +46,12 @@ registerAgentRoutes(
 registerMcdocRoutes(
   router,
   container.queryBus,
+  container.guard,
+  container.logger,
+);
+registerAudioPlayerRoutes(
+  router,
+  container.audioPlayerService,
   container.guard,
   container.logger,
 );

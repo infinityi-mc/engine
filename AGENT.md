@@ -64,6 +64,7 @@ web entry: `apps/web/src/routes/`, SvelteKit static adapter
 
 ## Modules
 
+audioPlayer `src/modules/audioplayer/` downloaded music store, YouTube-backed downloads, Minecraft audioplayer playback API
 agent `src/modules/agent/` agent definitions, sessions, runtimes, tools, HTTP agent API
 llm `src/modules/llm/` provider abstraction and OpenAI-compatible/Anthropic/Gemini adapters
 mcdoc `src/modules/mcdoc/` read-only Minecraft schema index, search, projections

@@ -35,6 +35,14 @@ import { ServerPropertiesNotFoundError } from "../../domain/errors/server-proper
 import { ServerAlreadyExistsError } from "../../../server/domain/errors/server-already-exists.error";
 import { ServerNotFoundError } from "../../../server/domain/errors/server-not-found.error";
 
+class InvalidMinecraftServerFeaturesError extends Error {
+  readonly name = "InvalidMinecraftServerFeaturesError";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 export function registerMinecraftRoutes(
   router: Router,
   commandBus: CommandBus,
@@ -74,6 +82,7 @@ export function registerMinecraftRoutes(
         jarFile: jarFile.value,
         jvmArgs: jvmArgs.jvmArgs ?? [],
         serverArgs: serverArgs.serverArgs ?? [...DEFAULT_SERVER_ARGS],
+        ...parseFeatures(body),
       };
 
       const created = await commandBus.execute<CreateMinecraftServerCommand, MinecraftServer>(
@@ -222,6 +231,7 @@ function serializeServer(server: MinecraftServer): Record<string, unknown> {
     jvmArgs: server.jvmArgs,
     serverArgs: server.serverArgs,
     ...(server.players !== undefined ? { players: server.players } : {}),
+    ...(server.features !== undefined ? { features: server.features } : {}),
     ...(server.agents !== undefined ? {
       agents: server.agents.map((a) => ({
         id: a.id,
@@ -321,7 +331,35 @@ function parsePatch(body: Record<string, unknown>): MinecraftServerPatch {
     };
   }
 
+  patch = { ...patch, ...parseFeatures(body) };
+
   return patch;
+}
+
+function parseFeatures(body: Record<string, unknown>): Pick<MinecraftServer, "features"> | Record<string, never> {
+  if (body.features === undefined) return {};
+  if (!isRecord(body.features)) {
+    throw new InvalidMinecraftServerFeaturesError("features must be an object.");
+  }
+
+  const featureKeys = Object.keys(body.features);
+  if (!featureKeys.every((key) => key === "audioPlayer")) {
+    throw new InvalidMinecraftServerFeaturesError("features contains an unsupported feature key.");
+  }
+
+  const audioPlayer = body.features.audioPlayer;
+  if (audioPlayer === undefined) return {};
+  if (!isRecord(audioPlayer) || typeof audioPlayer.enabled !== "boolean") {
+    throw new InvalidMinecraftServerFeaturesError("features.audioPlayer.enabled must be a boolean.");
+  }
+
+  return {
+    features: {
+      audioPlayer: {
+        enabled: audioPlayer.enabled,
+      },
+    },
+  };
 }
 
 async function handleErrors(action: () => Promise<Response>, logger: LoggerPort): Promise<Response> {
@@ -330,6 +368,10 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
   } catch (error) {
     if (error instanceof InvalidMinecraftPlayerNameError) {
       return jsonResponse({ error: "InvalidMinecraftPlayerName", playerName: error.playerName, message: error.message }, { status: 400 });
+    }
+
+    if (error instanceof InvalidMinecraftServerFeaturesError) {
+      return jsonResponse({ error: "InvalidMinecraftServerFeatures", message: error.message }, { status: 400 });
     }
 
     if (error instanceof MinecraftServerNotFoundError) {

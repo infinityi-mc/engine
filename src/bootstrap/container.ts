@@ -132,6 +132,17 @@ import { YoutubeService } from "../modules/youtube/application/youtube.service";
 import { YoutubeDlpBinaryManager } from "../modules/youtube/infrastructure/binary/youtube-dlp-binary-manager";
 import { YoutubeDlExecAdapter } from "../modules/youtube/infrastructure/download/youtube-dl-exec.adapter";
 import { YtSearchAdapter } from "../modules/youtube/infrastructure/search/yt-search.adapter";
+import type { AudioPlayerService as AudioPlayerServiceType } from "../modules/audioplayer/application/audio-player.service";
+import { AudioPlayerService } from "../modules/audioplayer/application/audio-player.service";
+import { JsonAudioTrackRepositoryAdapter } from "../modules/audioplayer/infrastructure/persistence/json-audio-track-repository.adapter";
+import {
+  DeleteMusicTool,
+  DownloadMusicTool,
+  ListMusicTool,
+  PlayMusicTool,
+  SearchMusicTool,
+  StopMusicTool,
+} from "../modules/agent/infrastructure/tools/audioplayer-tools";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -151,6 +162,7 @@ export interface AppContainer {
   readonly sessionRepository: SessionRepositoryPort;
   readonly mcdocRepository: McdocRepositoryPort;
   readonly youtubeService: YoutubeServiceType;
+  readonly audioPlayerService: AudioPlayerServiceType;
 }
 
 export async function createContainer(): Promise<AppContainer> {
@@ -370,6 +382,20 @@ export async function createContainer(): Promise<AppContainer> {
   const youtubeDownloader = new YoutubeDlExecAdapter(youtubeBinaryManager, undefined, logger);
   const youtubeService = new YoutubeService(youtubeSearch, youtubeDownloader);
 
+  // Audioplayer module — high-level music persistence and Minecraft playback orchestration.
+  const audioTrackRepository = new JsonAudioTrackRepositoryAdapter(dataDir, logger);
+  const audioPlayerService = new AudioPlayerService({
+    tracks: audioTrackRepository,
+    minecraftRepository,
+    serverRegistry,
+    stdin: minecraftStdin,
+    metadata: serverMetadata,
+    playerData,
+    youtube: youtubeService,
+    config,
+    logger,
+  });
+
   // Agent module
   const toolRegistry = new InMemoryToolRegistry(logger);
   toolRegistry.register(new RunPythonTool(terminal, logger));
@@ -388,6 +414,12 @@ export async function createContainer(): Promise<AppContainer> {
   toolRegistry.register(new MinecraftMetadataTool(queryBus, logger));
   toolRegistry.register(new GetPlayerInfoTool(queryBus, logger));
   toolRegistry.register(new SendMinecraftCommandsTool(minecraftRepository, minecraftStdin, minecraftLog, serverRegistry, logger));
+  toolRegistry.register(new PlayMusicTool(audioPlayerService));
+  toolRegistry.register(new StopMusicTool(audioPlayerService));
+  toolRegistry.register(new SearchMusicTool(audioPlayerService));
+  toolRegistry.register(new DownloadMusicTool(audioPlayerService));
+  toolRegistry.register(new DeleteMusicTool(audioPlayerService));
+  toolRegistry.register(new ListMusicTool(audioPlayerService));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);
   const sessionRepository = new FileSessionRepository({
@@ -444,5 +476,6 @@ export async function createContainer(): Promise<AppContainer> {
     sessionRepository,
     mcdocRepository,
     youtubeService,
+    audioPlayerService,
   };
 }

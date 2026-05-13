@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AUDIO_PLAYER_DEFAULTS } from "./config-defaults";
 
 const ProviderConfigSchema = z.object({
   apiKey: z.string().min(1),
@@ -49,8 +50,16 @@ const MinecraftConfigSchema = z.object({
   agent: MinecraftAgentConfigSchema.optional(),
 });
 
+const AudioPlayerConfigSchema = z.object({
+  maxDownloadSize: z.number().positive().default(AUDIO_PLAYER_DEFAULTS.maxDownloadSize),
+  downloadFormat: z.string().min(1).default(AUDIO_PLAYER_DEFAULTS.downloadFormat),
+  maxPlayerRequest: z.number().positive().default(AUDIO_PLAYER_DEFAULTS.maxPlayerRequest),
+  playbackRange: z.number().positive().default(AUDIO_PLAYER_DEFAULTS.playbackRange),
+});
+
 export const ConfigSchema = z.object({
   llm: LlmConfigSchema,
   agent: AgentConfigSchema.optional(),
   minecraft: MinecraftConfigSchema.optional(),
+  audioPlayer: AudioPlayerConfigSchema.default(AUDIO_PLAYER_DEFAULTS),
 });

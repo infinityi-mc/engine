@@ -5,6 +5,7 @@ export interface ConfigPort {
   getLlmConfig(): LlmConfig;
   getAgentConfig(): AppConfig["agent"];
   getMinecraftAgentConfig(): NonNullable<NonNullable<AppConfig["minecraft"]>["agent"]>;
+  getAudioPlayerConfig(): NonNullable<AppConfig["audioPlayer"]>;
   getApiKey(provider: string): string;
   getBaseUrl(provider: string): string;
   onChange(listener: (config: AppConfig) => void): () => void;

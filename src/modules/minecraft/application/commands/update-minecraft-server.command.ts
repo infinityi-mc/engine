@@ -1,5 +1,5 @@
 import type { Command } from "../../../../shared/application/command-bus";
-import type { PlayerConfig, AgentAccess } from "../../domain/types/minecraft-server";
+import type { PlayerConfig, AgentAccess, MinecraftServerFeatures } from "../../domain/types/minecraft-server";
 
 export const UPDATE_MINECRAFT_SERVER_COMMAND = "minecraft.server.update" as const;
 
@@ -12,6 +12,7 @@ export interface MinecraftServerPatch {
   readonly serverArgs?: string[];
   readonly players?: PlayerConfig;
   readonly agents?: AgentAccess[];
+  readonly features?: MinecraftServerFeatures;
 }
 
 export class UpdateMinecraftServerCommand implements Command<typeof UPDATE_MINECRAFT_SERVER_COMMAND> {

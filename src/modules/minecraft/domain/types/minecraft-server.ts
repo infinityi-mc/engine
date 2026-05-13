@@ -19,6 +19,12 @@ export interface AgentAccess {
   readonly commands?: readonly string[];
 }
 
+export interface MinecraftServerFeatures {
+  readonly audioPlayer?: {
+    readonly enabled: boolean;
+  };
+}
+
 export interface MinecraftServer {
   readonly id: string;
   readonly name: string;
@@ -29,4 +35,5 @@ export interface MinecraftServer {
   readonly serverArgs: string[];
   readonly players?: PlayerConfig;
   readonly agents?: AgentAccess[];
+  readonly features?: MinecraftServerFeatures;
 }
