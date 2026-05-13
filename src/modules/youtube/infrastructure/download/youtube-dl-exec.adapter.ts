@@ -13,6 +13,8 @@ import type {
   YoutubeVideoMetadata,
 } from "../../domain/types/youtube.types";
 import type { YoutubeBinaryPort } from "../binary/youtube-binary.port";
+import type { YoutubeFfmpegPort } from "../ffmpeg/youtube-ffmpeg.port";
+import type { YoutubeJsRuntimePort } from "../js-runtime/youtube-js-runtime.port";
 
 export type YoutubeDlClient = (url: string, flags?: Flags) => Promise<unknown>;
 export type YoutubeDlFactory = (binaryPath: string) => YoutubeDlClient;
@@ -22,14 +24,17 @@ export class YoutubeDlExecAdapter implements YoutubeDownloadPort {
     private readonly binaryManager: YoutubeBinaryPort,
     private readonly createClient: YoutubeDlFactory = createYoutubeDl,
     private readonly logger: LoggerPort = noopLogger,
+    private readonly ffmpegManager?: YoutubeFfmpegPort,
+    private readonly jsRuntimeProvider?: YoutubeJsRuntimePort,
   ) {}
 
   async getMetadata(input: YoutubeMetadataInput): Promise<YoutubeVideoMetadata> {
     try {
       const binaryPath = await this.binaryManager.ensureBinary();
+      const flags = toYoutubeDlFlags(input.flags);
       const client = this.createClient(binaryPath);
       const metadata = await client(input.url, {
-        ...toYoutubeDlFlags(input.flags),
+        ...withDefaultJsRuntime(flags, this.jsRuntimeProvider),
         dumpSingleJson: true,
         skipDownload: true,
         noWarnings: true,
@@ -50,9 +55,14 @@ export class YoutubeDlExecAdapter implements YoutubeDownloadPort {
   async downloadVideo(input: YoutubeDownloadInput): Promise<YoutubeDownloadResult> {
     try {
       const binaryPath = await this.binaryManager.ensureBinary();
+      const flags = toYoutubeDlFlags(input.flags);
+      const ffmpegLocation = flags.ffmpegLocation === undefined
+        ? await this.ffmpegManager?.ensureFfmpeg()
+        : undefined;
       const client = this.createClient(binaryPath);
       const result = await client(input.url, {
-        ...toYoutubeDlFlags(input.flags),
+        ...withDefaultJsRuntime(flags, this.jsRuntimeProvider),
+        ...(ffmpegLocation !== undefined ? { ffmpegLocation } : {}),
         output: input.outputPath,
       });
 
@@ -87,4 +97,15 @@ function toYoutubeDlFlags(flags: YoutubeDlpFlags | undefined): Flags {
   });
 
   return Object.fromEntries(entries) as Flags;
+}
+
+function withDefaultJsRuntime(flags: Flags, jsRuntimeProvider: YoutubeJsRuntimePort | undefined): Flags {
+  if (flags.jsRuntimes !== undefined || jsRuntimeProvider === undefined) {
+    return flags;
+  }
+
+  return {
+    ...flags,
+    jsRuntimes: jsRuntimeProvider.getJsRuntime(),
+  };
 }

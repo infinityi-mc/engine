@@ -13,7 +13,7 @@ types:
 errors:
   `AudioPlayerFeatureDisabledError`  `domain/errors/audio-player.errors.ts`
   `AudioTrackNotFoundError`          `domain/errors/audio-player.errors.ts`
-  `AudioTrackWorldMismatchError`     `domain/errors/audio-player.errors.ts`
+  `AudioTrackLevelMismatchError`     `domain/errors/audio-player.errors.ts`
   `AudioTrackAlreadyPlayingError`    `domain/errors/audio-player.errors.ts`
   `AudioDownloadTooLargeError`       `domain/errors/audio-player.errors.ts`
 
@@ -43,9 +43,9 @@ scopes: `infrastructure/http/scopes.ts`
 
 - Server definitions must opt in with `features.audioPlayer.enabled === true`.
 - Track store path is `DATA_DIR/audioplayer/tracks.json`, keyed by UUID.
-- Download output path is `<server.directory>/<worldName>/audioplayer/<uuid>.<downloadFormat>`.
+- Download output path is `<server.directory>/<levelName>/audioplayer/<uuid>.<downloadFormat>`.
 - `audioPlayer` config defaults: `maxDownloadSize=15MiB`, `downloadFormat=mp3`, `maxPlayerRequest=20`, `playbackRange=32`.
-- Play checks server running state, track existence, world match, and online player before sending the play command.
+- Play checks server running state, track existence, level match, and online player before sending the play command.
 - One track may play per server; new playback stops existing playing tracks for that server.
 - Delete is blocked while `isPlaying` is true.
 

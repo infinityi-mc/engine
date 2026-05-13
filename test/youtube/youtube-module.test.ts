@@ -1,16 +1,19 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { YoutubeService } from "../../src/modules/youtube/application/youtube.service";
 import { YoutubeDlpBinaryManager } from "../../src/modules/youtube/infrastructure/binary/youtube-dlp-binary-manager";
 import { YoutubeDlExecAdapter } from "../../src/modules/youtube/infrastructure/download/youtube-dl-exec.adapter";
+import { YoutubeFfmpegManager } from "../../src/modules/youtube/infrastructure/ffmpeg/youtube-ffmpeg-manager";
+import { BunJsRuntimeProvider } from "../../src/modules/youtube/infrastructure/js-runtime/bun-js-runtime.provider";
 import { YtSearchAdapter } from "../../src/modules/youtube/infrastructure/search/yt-search.adapter";
 import type { YoutubeDownloadPort } from "../../src/modules/youtube/domain/ports/youtube-download.port";
 import type { YoutubeSearchPort } from "../../src/modules/youtube/domain/ports/youtube-search.port";
 import type { YoutubeSearchInput } from "../../src/modules/youtube/domain/types/youtube.types";
 import { YoutubeDownloadError } from "../../src/modules/youtube/domain/errors/youtube.errors";
 import { YoutubeUnsupportedPlatformError } from "../../src/modules/youtube/infrastructure/binary/youtube-binary.errors";
+import { YoutubeFfmpegUnsupportedPlatformError } from "../../src/modules/youtube/infrastructure/ffmpeg/youtube-ffmpeg.errors";
 import { noopLogger } from "../../src/shared/observability/logger.port";
 
 describe("youtube module", () => {
@@ -95,6 +98,46 @@ describe("youtube module", () => {
     expect(() => manager.getBinaryPath()).toThrow(YoutubeUnsupportedPlatformError);
   });
 
+  test("installs ffmpeg and ffprobe into bin", async () => {
+    const requestedUrls: string[] = [];
+    const manager = new YoutubeFfmpegManager({
+      binDir: directory,
+      platform: "win32",
+      arch: "x64",
+      logger: noopLogger,
+      fetchArchive: async (url) => {
+        requestedUrls.push(url);
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+      },
+      extractArchive: async (_archivePath, destinationDir) => {
+        const nestedBinDir = path.join(destinationDir, "ffmpeg-build", "bin");
+        await mkdir(nestedBinDir, { recursive: true });
+        await writeFile(path.join(nestedBinDir, "ffmpeg.exe"), "ffmpeg", "utf8");
+        await writeFile(path.join(nestedBinDir, "ffprobe.exe"), "ffprobe", "utf8");
+      },
+    });
+
+    const binDir = await manager.ensureFfmpeg();
+    const secondBinDir = await manager.ensureFfmpeg();
+
+    expect(binDir).toBe(directory);
+    expect(secondBinDir).toBe(directory);
+    expect(await readFile(path.join(directory, "ffmpeg.exe"), "utf8")).toBe("ffmpeg");
+    expect(await readFile(path.join(directory, "ffprobe.exe"), "utf8")).toBe("ffprobe");
+    expect(requestedUrls).toEqual(["https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip"]);
+  });
+
+  test("rejects unsupported ffmpeg platforms", async () => {
+    const manager = new YoutubeFfmpegManager({
+      binDir: directory,
+      platform: "linux",
+      arch: "arm64",
+      logger: noopLogger,
+    });
+
+    await expect(manager.ensureFfmpeg()).rejects.toThrow(YoutubeFfmpegUnsupportedPlatformError);
+  });
+
   test("normalizes yt-search video results and applies caller limit", async () => {
     const adapter = new YtSearchAdapter(async () => ({
       videos: [
@@ -163,6 +206,8 @@ describe("youtube module", () => {
         return { id: "video-1", title: "Video" };
       },
       noopLogger,
+      { ensureFfmpeg: async () => path.join(directory, "bin") },
+      { getJsRuntime: () => "bun:/runtime/bun" },
     );
 
     const metadata = await adapter.getMetadata({ url: "https://youtube.test/watch?v=video-1" });
@@ -178,14 +223,82 @@ describe("youtube module", () => {
       {
         binaryPath: path.join(directory, "youtube-dlp.exe"),
         url: "https://youtube.test/watch?v=video-1",
-        flags: { dumpSingleJson: true, skipDownload: true, noWarnings: true },
+        flags: { jsRuntimes: "bun:/runtime/bun", dumpSingleJson: true, skipDownload: true, noWarnings: true },
       },
       {
         binaryPath: path.join(directory, "youtube-dlp.exe"),
         url: "https://youtube.test/watch?v=video-1",
-        flags: { format: "best", output: path.join(directory, "video.%(ext)s") },
+        flags: { format: "best", jsRuntimes: "bun:/runtime/bun", ffmpegLocation: path.join(directory, "bin"), output: path.join(directory, "video.%(ext)s") },
       },
     ]);
+  });
+
+  test("does not override consumer jsRuntimes", async () => {
+    const calls: Array<{ readonly flags: unknown }> = [];
+    const binaryManager = {
+      getBinaryPath: () => path.join(directory, "youtube-dlp.exe"),
+      ensureBinary: async () => path.join(directory, "youtube-dlp.exe"),
+    };
+    const adapter = new YoutubeDlExecAdapter(
+      binaryManager,
+      () => async (_url, flags) => {
+        calls.push({ flags });
+        return { id: "video-1" };
+      },
+      noopLogger,
+      undefined,
+      { getJsRuntime: () => "bun:/runtime/bun" },
+    );
+
+    await adapter.getMetadata({
+      url: "https://youtube.test/watch?v=video-1",
+      flags: { jsRuntimes: "deno:/runtime/deno" },
+    });
+
+    expect(calls).toEqual([
+      { flags: { jsRuntimes: "deno:/runtime/deno", dumpSingleJson: true, skipDownload: true, noWarnings: true } },
+    ]);
+  });
+
+  test("formats Bun runtime path for yt-dlp", () => {
+    const provider = new BunJsRuntimeProvider({ runtimePath: path.join(directory, "bun.exe") });
+
+    expect(provider.getJsRuntime()).toBe(`bun:${path.resolve(directory, "bun.exe")}`);
+  });
+
+  test("does not override consumer ffmpegLocation", async () => {
+    let ensureFfmpegCalls = 0;
+    const calls: Array<{ readonly flags: unknown }> = [];
+    const binaryManager = {
+      getBinaryPath: () => path.join(directory, "youtube-dlp.exe"),
+      ensureBinary: async () => path.join(directory, "youtube-dlp.exe"),
+    };
+    const adapter = new YoutubeDlExecAdapter(
+      binaryManager,
+      () => async (_url, flags) => {
+        calls.push({ flags });
+        return { id: "video-1" };
+      },
+      noopLogger,
+      {
+        async ensureFfmpeg() {
+          ensureFfmpegCalls += 1;
+          return path.join(directory, "bin");
+        },
+      },
+      { getJsRuntime: () => "bun:/runtime/bun" },
+    );
+
+    await adapter.downloadVideo({
+      url: "https://youtube.test/watch?v=video-1",
+      outputPath: path.join(directory, "video.%(ext)s"),
+      flags: { ffmpegLocation: "custom-ffmpeg" },
+    });
+
+    expect(calls).toEqual([
+      { flags: { ffmpegLocation: "custom-ffmpeg", jsRuntimes: "bun:/runtime/bun", output: path.join(directory, "video.%(ext)s") } },
+    ]);
+    expect(ensureFfmpegCalls).toBe(0);
   });
 
   test("service delegates low-level surfaces without adding policy", async () => {

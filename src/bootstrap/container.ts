@@ -131,6 +131,8 @@ import type { YoutubeService as YoutubeServiceType } from "../modules/youtube/ap
 import { YoutubeService } from "../modules/youtube/application/youtube.service";
 import { YoutubeDlpBinaryManager } from "../modules/youtube/infrastructure/binary/youtube-dlp-binary-manager";
 import { YoutubeDlExecAdapter } from "../modules/youtube/infrastructure/download/youtube-dl-exec.adapter";
+import { YoutubeFfmpegManager } from "../modules/youtube/infrastructure/ffmpeg/youtube-ffmpeg-manager";
+import { BunJsRuntimeProvider } from "../modules/youtube/infrastructure/js-runtime/bun-js-runtime.provider";
 import { YtSearchAdapter } from "../modules/youtube/infrastructure/search/yt-search.adapter";
 import type { AudioPlayerService as AudioPlayerServiceType } from "../modules/audioplayer/application/audio-player.service";
 import { AudioPlayerService } from "../modules/audioplayer/application/audio-player.service";
@@ -378,8 +380,19 @@ export async function createContainer(): Promise<AppContainer> {
     binDir: path.join(process.cwd(), "bin"),
     logger,
   });
+  const youtubeFfmpegManager = new YoutubeFfmpegManager({
+    binDir: path.join(process.cwd(), "bin"),
+    logger,
+  });
+  const youtubeJsRuntimeProvider = new BunJsRuntimeProvider();
   const youtubeSearch = new YtSearchAdapter(undefined, logger);
-  const youtubeDownloader = new YoutubeDlExecAdapter(youtubeBinaryManager, undefined, logger);
+  const youtubeDownloader = new YoutubeDlExecAdapter(
+    youtubeBinaryManager,
+    undefined,
+    logger,
+    youtubeFfmpegManager,
+    youtubeJsRuntimeProvider,
+  );
   const youtubeService = new YoutubeService(youtubeSearch, youtubeDownloader);
 
   // Audioplayer module — high-level music persistence and Minecraft playback orchestration.

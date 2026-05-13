@@ -13,7 +13,7 @@ import {
   AudioPlayerRequestLimitError,
   AudioTrackAlreadyPlayingError,
   AudioTrackNotFoundError,
-  AudioTrackWorldMismatchError,
+  AudioTrackLevelMismatchError,
 } from "../../domain/errors/audio-player.errors";
 import type { AudioTrack, AudioTrackSortBy, SortOrder } from "../../domain/types/audio-track";
 import type { AudioPlayerService } from "../../application/audio-player.service";
@@ -112,7 +112,7 @@ function serializeTrack(track: AudioTrack): Record<string, unknown> {
     duration: track.duration,
     tags: track.tags,
     artist: track.artist,
-    worldName: track.worldName,
+    levelName: track.levelName,
     path: track.path,
     isPlaying: track.isPlaying,
     ...(track.coverImg !== undefined ? { coverImg: track.coverImg } : {}),
@@ -150,7 +150,7 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
       return jsonResponse({ error: error.name, playerName: error.playerName, message: error.message }, { status: 429 });
     }
     if (
-      error instanceof AudioTrackWorldMismatchError ||
+      error instanceof AudioTrackLevelMismatchError ||
       error instanceof AudioTrackAlreadyPlayingError ||
       error instanceof AudioDownloadTooLargeError
     ) {

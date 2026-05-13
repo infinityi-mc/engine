@@ -46,6 +46,11 @@ outbound:
 - Binary download is lazy: metadata/download ensure the binary exists; search does not.
 - Linux binary permissions are set to `755` after download.
 - Binary management is infrastructure-internal: `infrastructure/binary/youtube-binary.port.ts`.
+- Managed ffmpeg/ffprobe directory is `bin/`; `downloadVideo` injects `ffmpegLocation` unless consumer flags already provide it.
+- Windows ffmpeg source: BtbN latest `ffmpeg-master-latest-win64-lgpl.zip`; installs `bin/ffmpeg.exe` and `bin/ffprobe.exe`.
+- Linux ffmpeg source: BtbN latest `ffmpeg-master-latest-linux64-lgpl.tar.xz`; installs `bin/ffmpeg` and `bin/ffprobe`.
+- JS runtime provider is infrastructure-internal: `infrastructure/js-runtime/bun-js-runtime.provider.ts`.
+- Metadata/download inject `jsRuntimes: bun:<process.execPath>` unless consumer flags already provide `jsRuntimes`.
 
 ## Integration Rules
 

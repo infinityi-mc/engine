@@ -19,7 +19,7 @@ import {
   AudioPlayerFeatureDisabledError,
   AudioTrackAlreadyPlayingError,
   AudioTrackNotFoundError,
-  AudioTrackWorldMismatchError,
+  AudioTrackLevelMismatchError,
 } from "../domain/errors/audio-player.errors";
 import type { AudioTrackRepositoryPort } from "../domain/ports/audio-track-repository.port";
 import type { AudioTrack, ListAudioTracksInput } from "../domain/types/audio-track";
@@ -75,7 +75,7 @@ export class AudioPlayerService {
 
     const config = this.deps.config.getAudioPlayerConfig();
     const trackId = randomUUID();
-    const outputDir = path.join(server.directory, metadata.levelInfo.worldName, "audioplayer");
+    const outputDir = path.join(server.directory, metadata.levelName, "audioplayer");
     const outputPath = path.join(outputDir, `${trackId}.${config.downloadFormat}`);
     const videoMetadata = await this.deps.youtube.getMetadata({ url: input.url });
 
@@ -107,7 +107,7 @@ export class AudioPlayerService {
       duration: numberField(videoMetadata, "duration") ?? 0,
       tags: stringArrayField(videoMetadata, "tags"),
       artist: stringField(videoMetadata, "artist") ?? stringField(videoMetadata, "uploader") ?? "Unknown",
-      worldName: metadata.levelInfo.worldName,
+      levelName: metadata.levelName,
       path: outputPath,
       isPlaying: false,
       ...optionalStringProperty("coverImg", stringField(videoMetadata, "thumbnail")),
@@ -130,8 +130,8 @@ export class AudioPlayerService {
     if (track.serverId !== input.serverId) {
       throw new AudioTrackNotFoundError(input.trackId);
     }
-    if (track.worldName !== metadata.levelInfo.worldName) {
-      throw new AudioTrackWorldMismatchError(track.id, track.worldName, metadata.levelInfo.worldName);
+    if (track.levelName !== metadata.levelName) {
+      throw new AudioTrackLevelMismatchError(track.id, track.levelName, metadata.levelName);
     }
 
     assertValidPlayerName(input.player);

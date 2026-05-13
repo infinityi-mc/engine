@@ -95,7 +95,7 @@ function isAudioTrackLike(id: string, value: unknown): value is AudioTrack {
     typeof track.url === "string" &&
     typeof track.title === "string" &&
     typeof track.artist === "string" &&
-    typeof track.worldName === "string" &&
+    typeof track.levelName === "string" &&
     typeof track.path === "string" &&
     typeof track.dateAdded === "string" &&
     typeof track.duration === "number" &&

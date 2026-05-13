@@ -9,7 +9,7 @@ export interface AudioTrack {
   readonly duration: number;
   readonly tags: readonly string[];
   readonly artist: string;
-  readonly worldName: string;
+  readonly levelName: string;
   readonly path: string;
   readonly isPlaying: boolean;
   readonly coverImg?: string;

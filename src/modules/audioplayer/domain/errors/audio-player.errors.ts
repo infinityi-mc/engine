@@ -14,15 +14,15 @@ export class AudioTrackNotFoundError extends Error {
   }
 }
 
-export class AudioTrackWorldMismatchError extends Error {
-  readonly name = "AudioTrackWorldMismatchError";
+export class AudioTrackLevelMismatchError extends Error {
+  readonly name = "AudioTrackLevelMismatchError";
 
   constructor(
     readonly trackId: string,
-    readonly trackWorldName: string,
-    readonly serverWorldName: string,
+    readonly trackLevelName: string,
+    readonly serverLevelName: string,
   ) {
-    super(`Audio track "${trackId}" belongs to world "${trackWorldName}", but the server is running world "${serverWorldName}".`);
+    super(`Audio track "${trackId}" belongs to level "${trackLevelName}", but the server is running level "${serverLevelName}".`);
   }
 }
 

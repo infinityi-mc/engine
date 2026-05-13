@@ -1,6 +1,8 @@
 node_modules/
 dist/
 bin/youtube-dlp*
+bin/ffmpeg*
+bin/ffprobe*
 .env
 .env.*
 !.env.example
