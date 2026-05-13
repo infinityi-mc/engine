@@ -59,6 +59,7 @@ scopes: `infrastructure/http/scopes.ts`
 | `run_python` | none | `infrastructure/tools/run-python.tool.ts` |
 | `read_minecraft_logs` | `minecraft` | `infrastructure/tools/read-minecraft-logs.tool.ts` |
 | `minecraft_metadata` | `minecraft` | `infrastructure/tools/minecraft-metadata.tool.ts` |
+| `get_player_info` | `minecraft` | `infrastructure/tools/get-player-info.tool.ts` |
 | `send_minecraft_commands` | `minecraft` | `infrastructure/tools/send-minecraft-commands.tool.ts` |
 | `mcdoc_meta` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
 | `mcdoc_list_packages` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
@@ -91,7 +92,7 @@ handled:
 - `single-shot` never passes tools to the LLM and completes after one model response.
 - Max iteration and timeout failures save partial sessions and surface partial results to HTTP as `200` with `warning`.
 - `run_python` writes temp scripts under the OS temp dir, detects `python3` then `python`, and caps timeout at `300_000` ms.
-- Minecraft tools can use invocation `serverId` when input omits it.
+- Minecraft tools can use invocation `serverId`; `get_player_info` can also use invocation `playerName`.
 - `send_minecraft_commands` rejects commands matching per-agent blocked prefixes in `MinecraftServer.agents[].commands`.
 - Minecraft event handler invokes only action `invoke_agent`, rate-limits by player, checks server agent access, and replies via `tellraw` chunks of 200 chars.
 - `MinecraftSessionManagerAdapter` keeps server-to-session mapping in memory and trims non-system messages to config `minecraft.agent.messageCap`.
@@ -100,7 +101,7 @@ handled:
 
 consumes:
   `llm` module `LlmService`
-  `minecraft` module repository, stdin, log, metadata query, NBT, and `minecraft.log.pattern_matched`
+  `minecraft` module repository, stdin, log, metadata/player-data queries, NBT, and `minecraft.log.pattern_matched`
   `mcdoc` module repository for mcdoc tools
   `system` module terminal port for `run_python`
   `server` module registry for Minecraft command tools

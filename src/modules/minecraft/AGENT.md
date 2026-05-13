@@ -12,12 +12,17 @@ types:
   `AgentAccess`              `domain/types/minecraft-server.ts`
   `ServerMetadata`           `domain/types/server-metadata.ts`
   `LevelInfo`                `domain/types/server-metadata.ts`
+  `PlayerDataResult`         `domain/types/player-data.ts`
+  `PlayerData`               `domain/types/player-data.ts`
 
 errors:
   `MinecraftServerAlreadyExistsError`   `domain/errors/minecraft-server-already-exists.error.ts`
   `MinecraftServerNotFoundError`        `domain/errors/minecraft-server-not-found.error.ts`
   `MinecraftServerNotRunningError`      `domain/errors/minecraft-server-not-running.error.ts`
   `MinecraftServerRunningError`         `domain/errors/minecraft-server-running.error.ts`
+  `InvalidMinecraftPlayerNameError`     `domain/errors/invalid-minecraft-player-name.error.ts`
+  `MinecraftPlayerOfflineError`         `domain/errors/minecraft-player-offline.error.ts`
+  `MinecraftPlayerDataTimeoutError`     `domain/errors/minecraft-player-data-timeout.error.ts`
   `ServerPropertiesNotFoundError`       `domain/errors/server-properties-not-found.error.ts`
   `NbtFileNotFoundError`                `domain/errors/nbt-file-not-found.error.ts`
   `NbtPathNotFoundError`                `domain/errors/nbt-path-not-found.error.ts`
@@ -49,6 +54,9 @@ outbound:
   `MinecraftSessionManagerPort`     `domain/ports/minecraft-session-manager.port.ts`
   adapters:
     `MinecraftSessionManagerAdapter`   `../agent/infrastructure/session/minecraft-session-manager.adapter.ts`
+  `GetPlayerDataPort`             `domain/ports/get-player-data.port.ts`
+  adapters:
+    `MinecraftCommandPlayerDataAdapter`   `infrastructure/player-data/minecraft-command-player-data.adapter.ts`
   `LogListenerPort`                 `domain/ports/log-listener.port.ts`
   adapters:
     `MinecraftLogListener`          `infrastructure/listeners/minecraft-log.listener.ts`
@@ -72,6 +80,7 @@ outbound:
 | `minecraft.server.get` | `application/queries/get-minecraft-server.handler.ts` | `MinecraftServerDetails` |
 | `minecraft.server.stream-logs` | `application/queries/stream-minecraft-logs.handler.ts` | `ReadableStream<Uint8Array>` SSE stream |
 | `minecraft.server.metadata` | `application/queries/get-server-metadata.handler.ts` | `ServerMetadata` |
+| `minecraft.player.get-data` | `application/queries/get-player-data.handler.ts` | `PlayerDataResult` |
 
 ## Events
 
@@ -89,6 +98,7 @@ scopes: `infrastructure/http/scopes.ts`
 - `GET /minecraft/servers` requires `minecraft:server:read`.
 - `GET /minecraft/servers/:id` requires `minecraft:server:read`.
 - `GET /minecraft/servers/:id/metadata` requires `minecraft:server:read`.
+- `GET /minecraft/servers/:id/players/:playerName/info` requires `minecraft:server:read`.
 - `GET /minecraft/servers/:id/logs` requires `minecraft:server:read`; returns SSE.
 - `POST /minecraft/servers` requires `minecraft:server:write`.
 - `PATCH /minecraft/servers/:id` requires `minecraft:server:write`.
@@ -109,6 +119,8 @@ scopes: `infrastructure/http/scopes.ts`
 - `MinecraftLogListener` parses chat lines with `<player> message`, strips configured team prefixes/suffixes, and publishes pattern matches.
 - Container registers pattern `@ai` as `{ action: "invoke_agent", payload: { agentName: "minecraft-ingame" } }`.
 - Metadata reads `server.properties` and world `level.dat` through `FileSystemServerMetadataAdapter` and `PrismarineNbtAdapter`.
+- Player data uses `data get entity <playerName>`, parses the matching `has the following entity data:` log line, rejects offline players on `No entity was found`, and excludes root `attributes` and `recipeBook`.
+- Player names are restricted to vanilla names: `[A-Za-z0-9_]{1,16}`.
 
 ## Dependencies
 
@@ -131,3 +143,4 @@ consumed-by:
 `../../../test/minecraft/prismarine-nbt.adapter.test.ts`
 `../../../test/minecraft/nbt-tools.test.ts`
 `../../../test/minecraft/send-minecraft-commands.tool.test.ts`
+`../../../test/minecraft/get-player-data.test.ts`

@@ -64,9 +64,12 @@ import { STREAM_MINECRAFT_LOGS_QUERY } from "../modules/minecraft/application/qu
 import { StreamMinecraftLogsHandler } from "../modules/minecraft/application/queries/stream-minecraft-logs.handler";
 import { GET_SERVER_METADATA_QUERY } from "../modules/minecraft/application/queries/get-server-metadata.query";
 import { GetServerMetadataHandler } from "../modules/minecraft/application/queries/get-server-metadata.handler";
+import { GET_PLAYER_DATA_QUERY } from "../modules/minecraft/application/queries/get-player-data.query";
+import { GetPlayerDataHandler } from "../modules/minecraft/application/queries/get-player-data.handler";
 import { JsonMinecraftServerRepositoryAdapter } from "../modules/minecraft/infrastructure/persistence/json-minecraft-server-repository.adapter";
 import { BunMinecraftStdinAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-stdin.adapter";
 import { BunMinecraftLogAdapter } from "../modules/minecraft/infrastructure/process/bun-minecraft-log.adapter";
+import { MinecraftCommandPlayerDataAdapter } from "../modules/minecraft/infrastructure/player-data/minecraft-command-player-data.adapter";
 import { waitForProcessExit } from "../modules/minecraft/infrastructure/process/wait-for-exit";
 import { InMemoryPatternRegistryAdapter } from "../modules/minecraft/infrastructure/registry/in-memory-pattern-registry.adapter";
 import { MinecraftLogListener } from "../modules/minecraft/infrastructure/listeners/minecraft-log.listener";
@@ -87,6 +90,7 @@ import { ConfigAgentDefinitionRepository } from "../modules/agent/infrastructure
 import { RunPythonTool } from "../modules/agent/infrastructure/tools/run-python.tool";
 import { ReadMinecraftLogsTool } from "../modules/agent/infrastructure/tools/read-minecraft-logs.tool";
 import { MinecraftMetadataTool } from "../modules/agent/infrastructure/tools/minecraft-metadata.tool";
+import { GetPlayerInfoTool } from "../modules/agent/infrastructure/tools/get-player-info.tool";
 import { AgentService } from "../modules/agent/application/agent.service";
 import { FileSessionRepository } from "../modules/agent/infrastructure/persistence/file-session-repository.adapter";
 import { MinecraftSessionManagerAdapter } from "../modules/agent/infrastructure/session/minecraft-session-manager.adapter";
@@ -225,6 +229,13 @@ export async function createContainer(): Promise<AppContainer> {
   const minecraftWaitForExit = waitForProcessExit(serverProcess);
   const patternRegistry = new InMemoryPatternRegistryAdapter();
   const minecraftLogListener = new MinecraftLogListener(minecraftLog, patternRegistry, eventBus, minecraftRepository, logger);
+  const playerData = new MinecraftCommandPlayerDataAdapter(
+    minecraftRepository,
+    serverRegistry,
+    minecraftStdin,
+    minecraftLog,
+    logger,
+  );
 
   patternRegistry.register("@ai", { action: "invoke_agent", payload: { agentName: "minecraft-ingame" } });
 
@@ -291,6 +302,10 @@ export async function createContainer(): Promise<AppContainer> {
   queryBus.register(
     GET_SERVER_METADATA_QUERY,
     new GetServerMetadataHandler(minecraftRepository, serverMetadata),
+  );
+  queryBus.register(
+    GET_PLAYER_DATA_QUERY,
+    new GetPlayerDataHandler(playerData),
   );
 
   // LLM module
@@ -371,6 +386,7 @@ export async function createContainer(): Promise<AppContainer> {
   toolRegistry.register(new NbtKeysTool(nbtAdapter, logger));
   toolRegistry.register(new NbtStructureTool(nbtAdapter, logger));
   toolRegistry.register(new MinecraftMetadataTool(queryBus, logger));
+  toolRegistry.register(new GetPlayerInfoTool(queryBus, logger));
   toolRegistry.register(new SendMinecraftCommandsTool(minecraftRepository, minecraftStdin, minecraftLog, serverRegistry, logger));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);

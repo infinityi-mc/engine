@@ -17,11 +17,16 @@ import { ListMinecraftServersQuery } from "../../application/queries/list-minecr
 import { GetMinecraftServerQuery } from "../../application/queries/get-minecraft-server.query";
 import { GetServerMetadataQuery } from "../../application/queries/get-server-metadata.query";
 import type { ServerMetadata } from "../../domain/types/server-metadata";
+import { GetPlayerDataQuery } from "../../application/queries/get-player-data.query";
+import type { PlayerDataResult } from "../../domain/types/player-data";
 import { StreamMinecraftLogsQuery } from "../../application/queries/stream-minecraft-logs.query";
 import type { MinecraftServer } from "../../domain/types/minecraft-server";
 import { DEFAULT_SERVER_ARGS } from "../../domain/types/minecraft-server";
 import type { MinecraftServerDetails } from "../../application/queries/get-minecraft-server.query";
 import type { ServerInstance } from "../../../server/domain/types/server-instance";
+import { InvalidMinecraftPlayerNameError } from "../../domain/errors/invalid-minecraft-player-name.error";
+import { MinecraftPlayerDataTimeoutError } from "../../domain/errors/minecraft-player-data-timeout.error";
+import { MinecraftPlayerOfflineError } from "../../domain/errors/minecraft-player-offline.error";
 import { MinecraftServerNotFoundError } from "../../domain/errors/minecraft-server-not-found.error";
 import { MinecraftServerAlreadyExistsError } from "../../domain/errors/minecraft-server-already-exists.error";
 import { MinecraftServerNotRunningError } from "../../domain/errors/minecraft-server-not-running.error";
@@ -123,6 +128,18 @@ export function registerMinecraftRoutes(
         new GetServerMetadataQuery(serverId),
       );
       return jsonResponse(serializeMetadata(metadata));
+    }, logger);
+  }, SCOPES.SERVER_READ));
+
+  // GET /minecraft/servers/:id/players/:playerName/info — Get live player entity data
+  router.get("/minecraft/servers/:id/players/:playerName/info", guard.protect(async (_request, params) => {
+    const serverId = params.id!;
+    const playerName = params.playerName!;
+    return handleErrors(async () => {
+      const playerInfo = await queryBus.execute<GetPlayerDataQuery, PlayerDataResult>(
+        new GetPlayerDataQuery(serverId, playerName),
+      );
+      return jsonResponse(serializePlayerInfo(playerInfo));
     }, logger);
   }, SCOPES.SERVER_READ));
 
@@ -239,6 +256,15 @@ function serializeMetadata(metadata: ServerMetadata): Record<string, unknown> {
   };
 }
 
+function serializePlayerInfo(result: PlayerDataResult): Record<string, unknown> {
+  return {
+    serverId: result.serverId,
+    playerName: result.playerName,
+    online: true,
+    data: result.data,
+  };
+}
+
 function serializeInstance(instance: ServerInstance): Record<string, unknown> {
   return {
     id: instance.id,
@@ -302,8 +328,20 @@ async function handleErrors(action: () => Promise<Response>, logger: LoggerPort)
   try {
     return await action();
   } catch (error) {
+    if (error instanceof InvalidMinecraftPlayerNameError) {
+      return jsonResponse({ error: "InvalidMinecraftPlayerName", playerName: error.playerName, message: error.message }, { status: 400 });
+    }
+
     if (error instanceof MinecraftServerNotFoundError) {
       return jsonResponse({ error: "MinecraftServerNotFound", serverId: error.serverId, message: error.message }, { status: 404 });
+    }
+
+    if (error instanceof MinecraftPlayerOfflineError) {
+      return jsonResponse({ error: "MinecraftPlayerOffline", serverId: error.serverId, playerName: error.playerName, message: error.message }, { status: 404 });
+    }
+
+    if (error instanceof MinecraftPlayerDataTimeoutError) {
+      return jsonResponse({ error: "MinecraftPlayerDataTimeout", serverId: error.serverId, playerName: error.playerName, message: error.message }, { status: 504 });
     }
 
     if (error instanceof MinecraftServerAlreadyExistsError) {
