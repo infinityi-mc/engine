@@ -75,26 +75,9 @@ export class NodeSystemFilesAdapter implements FilesystemPort {
 
     try {
       const files = await this.resolveGrepFiles(input.path ?? ".", input.include);
-      const regexError = validateRegexPattern(input.pattern);
-      if (regexError !== undefined) {
-        throw new ClientInputError(regexError);
-      }
-      const flags = input.caseSensitive === false ? "gi" : "g";
-      const regex = createSafeRegex(input.pattern, flags);
-      const matches: GrepMatch[] = [];
+      const regex = this.createGrepRegex(input.pattern, input.caseSensitive);
       const maxResults = input.maxResults ?? Number.POSITIVE_INFINITY;
-
-      for (const filePath of files) {
-        if (matches.length >= maxResults) {
-          break;
-        }
-
-        const fileMatches = await grepFile(filePath, regex, maxResults - matches.length, this.logger);
-
-        for (const match of fileMatches) {
-          matches.push(match);
-        }
-      }
+      const matches = await this.grepInFiles(files, regex, maxResults);
 
       this.logger.debug("system.filesystem.grep", {
         module: "system",
@@ -110,14 +93,45 @@ export class NodeSystemFilesAdapter implements FilesystemPort {
 
       return matches;
     } catch (error) {
-      this.logFailure(error instanceof ClientInputError ? "warn" : "error", "system.filesystem.grep", "filesystem.grep", startedAt, error, {
-        path: input.path,
-        include: input.include,
-        caseSensitive: input.caseSensitive ?? true,
-        maxResults: input.maxResults,
-      });
+      this.logFailure(
+        error instanceof ClientInputError ? "warn" : "error",
+        "system.filesystem.grep",
+        "filesystem.grep",
+        startedAt,
+        error,
+        {
+          path: input.path,
+          include: input.include,
+          caseSensitive: input.caseSensitive ?? true,
+          maxResults: input.maxResults,
+        },
+      );
       throw error;
     }
+  }
+
+  private createGrepRegex(pattern: string, caseSensitive?: boolean): RegExp {
+    const regexError = validateRegexPattern(pattern);
+    if (regexError !== undefined) {
+      throw new ClientInputError(regexError);
+    }
+    const flags = caseSensitive === false ? "gi" : "g";
+    return createSafeRegex(pattern, flags);
+  }
+
+  private async grepInFiles(files: string[], regex: RegExp, maxResults: number): Promise<GrepMatch[]> {
+    const matches: GrepMatch[] = [];
+
+    for (const filePath of files) {
+      if (matches.length >= maxResults) {
+        break;
+      }
+
+      const fileMatches = await grepFile(filePath, regex, maxResults - matches.length, this.logger);
+      matches.push(...fileMatches);
+    }
+
+    return matches;
   }
 
   async listDir(directoryPath: string): Promise<FileEntry[]> {
@@ -197,29 +211,8 @@ export class NodeSystemFilesAdapter implements FilesystemPort {
         throw error;
       }
 
-      try {
-        await this.copy(source, destination);
-        await this.delete(source, true);
-      } catch (fallbackError) {
-        try {
-          await rm(destination, { recursive: true, force: true });
-        } catch (cleanupError) {
-          this.logFailure("warn", "system.filesystem.move.cleanup", "filesystem.move", startedAt, cleanupError, {
-            source,
-            destination,
-            fallback: "copy-delete",
-          });
-
-          throw new AggregateError([fallbackError, cleanupError], "Move fallback failed and destination cleanup failed");
-        }
-
-        this.logFailure("warn", "system.filesystem.move", "filesystem.move", startedAt, fallbackError, {
-          source,
-          destination,
-          fallback: "copy-delete",
-        });
-        throw fallbackError;
-      }
+      await this.moveFallback(source, destination, startedAt);
+      return;
     }
 
     this.logger.info("system.filesystem.move", {
@@ -229,6 +222,41 @@ export class NodeSystemFilesAdapter implements FilesystemPort {
       source,
       destination,
       durationMs: getDurationMs(startedAt),
+    });
+  }
+
+  private async moveFallback(source: string, destination: string, startedAt: number): Promise<void> {
+    try {
+      await this.copy(source, destination);
+      await this.delete(source, true);
+    } catch (fallbackError) {
+      await this.cleanupFailedMove(source, destination, startedAt, fallbackError);
+      throw fallbackError;
+    }
+  }
+
+  private async cleanupFailedMove(
+    source: string,
+    destination: string,
+    startedAt: number,
+    fallbackError: unknown,
+  ): Promise<void> {
+    try {
+      await rm(destination, { recursive: true, force: true });
+    } catch (cleanupError) {
+      this.logFailure("warn", "system.filesystem.move.cleanup", "filesystem.move", startedAt, cleanupError, {
+        source,
+        destination,
+        fallback: "copy-delete",
+      });
+
+      throw new AggregateError([fallbackError, cleanupError], "Move fallback failed and destination cleanup failed");
+    }
+
+    this.logFailure("warn", "system.filesystem.move", "filesystem.move", startedAt, fallbackError, {
+      source,
+      destination,
+      fallback: "copy-delete",
     });
   }
 
@@ -333,10 +361,11 @@ export class NodeSystemFilesAdapter implements FilesystemPort {
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
       });
 
-      this.logger[result.exitCode === 0 ? "info" : "warn"](`system.${operation}`, {
+      const success = result.exitCode === 0;
+      this.logger[success ? "info" : "warn"](`system.${operation}`, {
         module: "system",
         operation,
-        success: result.exitCode === 0,
+        success,
         tool,
         cwd: input.cwd,
         filesCount: input.files?.length ?? 0,
@@ -348,13 +377,20 @@ export class NodeSystemFilesAdapter implements FilesystemPort {
 
       return result;
     } catch (error) {
-      this.logFailure(error instanceof UnsupportedToolError ? "warn" : "error", `system.${operation}`, operation, startedAt, error, {
-        tool,
-        cwd: input.cwd,
-        filesCount: input.files?.length ?? 0,
-        hasInput: input.input !== undefined,
-        argsCount: input.args?.length ?? 0,
-      });
+      this.logFailure(
+        error instanceof UnsupportedToolError ? "warn" : "error",
+        `system.${operation}`,
+        operation,
+        startedAt,
+        error,
+        {
+          tool,
+          cwd: input.cwd,
+          filesCount: input.files?.length ?? 0,
+          hasInput: input.input !== undefined,
+          argsCount: input.args?.length ?? 0,
+        },
+      );
       throw error;
     }
   }
@@ -395,31 +431,20 @@ async function collectFiles(
   maxDepth: number,
   maxFiles: number,
 ): Promise<string[]> {
-  if (depth > maxDepth) {
-    return [];
-  }
+  if (depth > maxDepth) return [];
 
   const files: string[] = [];
   const entries = await readdir(directoryPath, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (files.length >= maxFiles) {
-      break;
-    }
+    if (files.length >= maxFiles) break;
 
     const entryPath = nodePath.join(directoryPath, entry.name);
 
     if (entry.isDirectory()) {
       const nestedFiles = await collectFiles(entryPath, depth + 1, maxDepth, maxFiles - files.length);
-
-      for (const filePath of nestedFiles) {
-        files.push(filePath);
-      }
-
-      continue;
-    }
-
-    if (entry.isFile()) {
+      files.push(...nestedFiles);
+    } else if (entry.isFile()) {
       files.push(entryPath);
     }
   }
@@ -485,23 +510,18 @@ function createSafeRegex(pattern: string, flags: string): RegExp {
   }
 }
 
-function getFileEntryType(entry: { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean }): FileEntry["type"] {
-  if (entry.isFile()) {
-    return "file";
-  }
-
-  if (entry.isDirectory()) {
-    return "directory";
-  }
-
-  if (entry.isSymbolicLink()) {
-    return "symlink";
-  }
-
+function getFileEntryType(entry: {
+  isFile(): boolean;
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+}): FileEntry["type"] {
+  if (entry.isFile()) return "file";
+  if (entry.isDirectory()) return "directory";
+  if (entry.isSymbolicLink()) return "symlink";
   return "other";
 }
 
-function isCrossDeviceError(error: unknown): boolean {
+function isCrossDeviceError(error: unknown): error is Error & { code: string } {
   return error instanceof Error && "code" in error && error.code === "EXDEV";
 }
 
