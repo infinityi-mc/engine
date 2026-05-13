@@ -70,6 +70,7 @@ mcdoc `src/modules/mcdoc/` read-only Minecraft schema index, search, projections
 minecraft `src/modules/minecraft/` Minecraft server definitions, lifecycle, logs, metadata, in-game events
 server `src/modules/server/` long-running process spawn/kill/status registry
 system `src/modules/system/` filesystem, search, text transforms, terminal execution
+youtube `src/modules/youtube/` low-level YouTube search, metadata, download, and managed yt-dlp binary
 
 ## Shared Infrastructure
 

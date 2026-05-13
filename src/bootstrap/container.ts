@@ -123,6 +123,11 @@ import {
   NbtStructureTool,
 } from "../modules/agent/infrastructure/tools/nbt-tools";
 import { SendMinecraftCommandsTool } from "../modules/agent/infrastructure/tools/send-minecraft-commands.tool";
+import type { YoutubeService as YoutubeServiceType } from "../modules/youtube/application/youtube.service";
+import { YoutubeService } from "../modules/youtube/application/youtube.service";
+import { YoutubeDlpBinaryManager } from "../modules/youtube/infrastructure/binary/youtube-dlp-binary-manager";
+import { YoutubeDlExecAdapter } from "../modules/youtube/infrastructure/download/youtube-dl-exec.adapter";
+import { YtSearchAdapter } from "../modules/youtube/infrastructure/search/yt-search.adapter";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -141,6 +146,7 @@ export interface AppContainer {
   readonly toolRegistry: ToolRegistryPort;
   readonly sessionRepository: SessionRepositoryPort;
   readonly mcdocRepository: McdocRepositoryPort;
+  readonly youtubeService: YoutubeServiceType;
 }
 
 export async function createContainer(): Promise<AppContainer> {
@@ -340,6 +346,15 @@ export async function createContainer(): Promise<AppContainer> {
   queryBus.register(GREP_MCDOC_FIELDS_QUERY, new GrepMcdocFieldsHandler(mcdocRepository));
   queryBus.register(FIND_MCDOC_REFERENCES_QUERY, new FindMcdocReferencesHandler(mcdocRepository));
 
+  // YouTube module — low-level search, metadata, and download surfaces only.
+  const youtubeBinaryManager = new YoutubeDlpBinaryManager({
+    binDir: path.join(process.cwd(), "bin"),
+    logger,
+  });
+  const youtubeSearch = new YtSearchAdapter(undefined, logger);
+  const youtubeDownloader = new YoutubeDlExecAdapter(youtubeBinaryManager, undefined, logger);
+  const youtubeService = new YoutubeService(youtubeSearch, youtubeDownloader);
+
   // Agent module
   const toolRegistry = new InMemoryToolRegistry(logger);
   toolRegistry.register(new RunPythonTool(terminal, logger));
@@ -412,5 +427,6 @@ export async function createContainer(): Promise<AppContainer> {
     toolRegistry,
     sessionRepository,
     mcdocRepository,
+    youtubeService,
   };
 }

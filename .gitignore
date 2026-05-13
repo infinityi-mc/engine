@@ -1,5 +1,6 @@
 node_modules/
 dist/
+bin/youtube-dlp*
 .env
 .env.*
 !.env.example
