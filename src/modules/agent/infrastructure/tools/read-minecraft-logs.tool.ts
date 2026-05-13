@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { MinecraftServerRepositoryPort } from "../../../minecraft/domain/ports/minecraft-server-repository.port";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
-import type { Tool, ToolResult } from "../../domain/types/tool.types";
+import type { Tool, ToolContext, ToolResult } from "../../domain/types/tool.types";
 
 const DEFAULT_LINES = 100;
 const MAX_LINES = 5000;
@@ -36,8 +36,8 @@ export class ReadMinecraftLogsTool implements Tool {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(input: unknown): Promise<ToolResult> {
-    const parsed = validateInput(input);
+  async execute(input: unknown, context?: ToolContext): Promise<ToolResult> {
+    const parsed = validateInput(input, context?.serverId);
     if (!parsed.ok) {
       return { output: parsed.error, isError: true };
     }
@@ -93,6 +93,7 @@ export class ReadMinecraftLogsTool implements Tool {
 
 function validateInput(
   input: unknown,
+  contextServerId?: string,
 ):
   | { ok: true; value: { serverId: string; lines: number; offset: number } }
   | { ok: false; error: string } {
@@ -102,7 +103,10 @@ function validateInput(
 
   const record = input as Record<string, unknown>;
 
-  if (typeof record.serverId !== "string" || record.serverId.length === 0) {
+  const serverId = (typeof record.serverId === "string" && record.serverId.length > 0)
+    ? record.serverId
+    : contextServerId;
+  if (!serverId || serverId.length === 0) {
     return {
       ok: false,
       error: "Missing or invalid required field: serverId (non-empty string).",
@@ -133,5 +137,5 @@ function validateInput(
     offset = record.offset;
   }
 
-  return { ok: true, value: { serverId: record.serverId, lines, offset } };
+  return { ok: true, value: { serverId, lines, offset } };
 }

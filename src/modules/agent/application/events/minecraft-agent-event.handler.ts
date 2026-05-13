@@ -110,11 +110,13 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
       return;
     }
 
-    const formattedMessage = `[${playerName}]: ${message}`;
+    const formattedMessage = `[Server: ${serverId}] [${playerName}]: ${message}`;
 
     try {
-      const runOptions =
-        session !== null ? { sessionId: session.sessionId } : undefined;
+      const runOptions = {
+        ...(session !== null ? { sessionId: session.sessionId } : {}),
+        serverId,
+      };
       const result = await this.deps.agentService.run(
         definition.id,
         formattedMessage,
@@ -164,8 +166,8 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
     payload: TellrawPayload,
   ): Promise<void> {
     const chunks = this.splitText(payload.response, MC_CHAT_MAX_RESPONSE_LENGTH);
-    for (const chunk of chunks) {
-      await this.sendSingleTellraw(serverId, { ...payload, response: chunk });
+    for (let i = 0; i < chunks.length; i++) {
+      await this.sendSingleTellraw(serverId, { ...payload, response: chunks[i]! }, i === 0);
     }
   }
 
@@ -174,6 +176,7 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
     const chunks: string[] = [];
 
     for (const line of lines) {
+      if (line.length === 0) continue;
       if (line.length <= maxLength) {
         chunks.push(line);
         continue;
@@ -200,35 +203,39 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
   private async sendSingleTellraw(
     serverId: string,
     payload: TellrawPayload,
+    isFirstChunk: boolean,
   ): Promise<void> {
     try {
+      const prefix = isFirstChunk
+        ? {
+            hover_event: {
+              action: "show_text",
+              value: [
+                "",
+                { color: "aqua", text: "Agent:" },
+                { text: " " },
+                { color: "gray", text: payload.agentName },
+                { text: "\n" },
+                { color: "green", text: "Token Used:" },
+                { text: " " },
+                { color: "gray", text: payload.tokenUsed },
+                { text: "\n" },
+                { color: "yellow", text: "Requested Player:" },
+                { text: " " },
+                { color: "gray", text: payload.playerName },
+                { text: "\n" },
+                { color: "red", text: "Status:" },
+                { text: " " },
+                { color: "gray", text: payload.status },
+              ],
+            },
+            text: "[",
+            extra: [{ color: "aqua", text: "AI" }, "]"],
+          }
+        : { text: "" };
       const json = JSON.stringify([
         "",
-        {
-          hover_event: {
-            action: "show_text",
-            value: [
-              "",
-              { color: "aqua", text: "Agent:" },
-              { text: " " },
-              { color: "gray", text: payload.agentName },
-              { text: "\n" },
-              { color: "green", text: "Token Used:" },
-              { text: " " },
-              { color: "gray", text: payload.tokenUsed },
-              { text: "\n" },
-              { color: "yellow", text: "Requested Player:" },
-              { text: " " },
-              { color: "gray", text: payload.playerName },
-              { text: "\n" },
-              { color: "red", text: "Status:" },
-              { text: " " },
-              { color: "gray", text: payload.status },
-            ],
-          },
-          text: "[",
-          extra: [{ color: "aqua", text: "AI" }, "]"],
-        },
+        prefix,
         { color: "gray", text: ` ${payload.response}` },
       ]);
       await this.deps.stdin.sendCommand(serverId, `tellraw @a ${json}`);

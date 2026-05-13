@@ -1,6 +1,6 @@
 import type { QueryBus } from "../../../../shared/application/query-bus";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
-import type { Tool, ToolResult } from "../../domain/types/tool.types";
+import type { Tool, ToolContext, ToolResult } from "../../domain/types/tool.types";
 import { GetServerMetadataQuery } from "../../../minecraft/application/queries/get-server-metadata.query";
 import type { ServerMetadata } from "../../../minecraft/domain/types/server-metadata";
 import { MinecraftServerNotFoundError } from "../../../minecraft/domain/errors/minecraft-server-not-found.error";
@@ -28,12 +28,14 @@ export class MinecraftMetadataTool implements Tool {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(input: unknown): Promise<ToolResult> {
+  async execute(input: unknown, context?: ToolContext): Promise<ToolResult> {
     const obj = asObject(input);
     if (!obj) return toolError("Input must be an object.");
 
-    const serverId = obj.serverId;
-    if (typeof serverId !== "string" || serverId.length === 0) {
+    const serverId = (typeof obj.serverId === "string" && obj.serverId.length > 0)
+      ? obj.serverId
+      : context?.serverId;
+    if (!serverId || serverId.length === 0) {
       return toolError(
         "Missing or invalid required field: serverId (non-empty string).",
       );

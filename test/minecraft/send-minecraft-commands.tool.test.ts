@@ -371,4 +371,23 @@ describe("SendMinecraftCommandsTool", () => {
     expect(parsed.results[0].feedback).toContain("[12:34:56] [Server thread/INFO]: Set the time to 1000");
     expect(parsed.results[0].feedback).toContain("[12:34:56] [Server thread/INFO]: Done");
   });
+
+  test("LLM-provided serverId takes precedence over context serverId", async () => {
+    const server = fakeServer({ id: "explorers" });
+    const stdin = fakeStdin();
+    const logPort = fakeLogPort();
+    const registry = fakeServerRegistry();
+
+    const tool = new SendMinecraftCommandsTool(
+      fakeRepository([server]), stdin, logPort, registry, noopLogger,
+    );
+
+    const result = await tool.execute(
+      { serverId: "explorers", commands: ["say hello"] },
+      { agentId: "test-agent", serverId: "other-server" },
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(stdin.commands).toEqual(["say hello"]);
+  });
 });

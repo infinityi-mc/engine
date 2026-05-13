@@ -42,7 +42,7 @@ export class SendMinecraftCommandsTool implements Tool {
   ) {}
 
   async execute(input: unknown, context?: ToolContext): Promise<ToolResult> {
-    const parsed = validateInput(input);
+    const parsed = validateInput(input, context?.serverId);
     if (!parsed.ok) return toolError(parsed.error);
 
     const { serverId, commands } = parsed.value;
@@ -113,13 +113,17 @@ function isCommandBlocked(command: string, blacklist: readonly string[]): boolea
 
 function validateInput(
   input: unknown,
+  contextServerId?: string,
 ):
   | { ok: true; value: { serverId: string; commands: string[] } }
   | { ok: false; error: string } {
   const obj = asObject(input);
   if (!obj) return { ok: false, error: "Input must be an object." };
 
-  if (typeof obj.serverId !== "string" || obj.serverId.length === 0) {
+  const serverId = (typeof obj.serverId === "string" && obj.serverId.length > 0)
+    ? obj.serverId
+    : contextServerId;
+  if (!serverId || serverId.length === 0) {
     return { ok: false, error: "Missing or invalid required field: serverId (non-empty string)." };
   }
 
@@ -140,5 +144,5 @@ function validateInput(
     commands.push(cmd);
   }
 
-  return { ok: true, value: { serverId: obj.serverId, commands } };
+  return { ok: true, value: { serverId, commands } };
 }

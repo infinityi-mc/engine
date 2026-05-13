@@ -6,6 +6,7 @@ export interface ToolResult {
 
 export interface ToolContext {
   readonly agentId: string;
+  readonly serverId?: string;
 }
 
 export interface Tool {

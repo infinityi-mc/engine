@@ -27,6 +27,7 @@ export interface RunOptions {
   maxIterations?: number;
   timeoutMs?: number;
   sessionId?: string;
+  serverId?: string;
 }
 
 export class AgentService {
@@ -79,10 +80,10 @@ export class AgentService {
     });
 
     if (definition.runtime === "single-shot") {
-      return this.singleShot.run(session, definition);
+      return this.singleShot.run(session, definition, options?.serverId);
     }
 
-    return this.toolUseLoop.run(session, definition, maxIterations, timeoutMs);
+    return this.toolUseLoop.run(session, definition, maxIterations, timeoutMs, options?.serverId);
   }
 
   async getDefinition(agentId: string): Promise<AgentDefinition | undefined> {
