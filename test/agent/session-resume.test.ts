@@ -215,15 +215,19 @@ describe("session resume", () => {
     );
   });
 
-  test("throws SessionNotResumableError when session is failed", async () => {
+  test("resuming a failed session succeeds and preserves history", async () => {
     let capturedSessionId: string | undefined;
+    let callCount = 0;
     const llmService = {
-      complete: async () => { throw new Error("LLM error"); },
+      complete: async () => {
+        callCount++;
+        if (callCount === 1) throw new Error("LLM error");
+        return fakeResponse("Recovered");
+      },
     } as unknown as LlmService;
 
     const sessionRepository = new FileSessionRepository({ dataDir: tempDir, logger: makeFakeLogger() });
 
-    // Wrap save to capture the sessionId before the failure
     const originalSave = sessionRepository.save.bind(sessionRepository);
     sessionRepository.save = async (session) => {
       capturedSessionId = session.sessionId;
@@ -256,9 +260,10 @@ describe("session resume", () => {
       logger: makeFakeLogger(),
     });
 
-    await expect(service2.run("test-agent", "Retry", { sessionId: capturedSessionId! })).rejects.toThrow(
-      SessionNotResumableError,
-    );
+    const result = await service2.run("test-agent", "Retry", { sessionId: capturedSessionId! });
+    expect(result.sessionId).toBe(capturedSessionId!);
+    expect(result.status).toBe("completed");
+    expect(result.content).toBe("ok");
   });
 
   test("response always includes sessionId", async () => {

@@ -108,13 +108,14 @@ export class AgentService {
       throw new SessionNotResumableError(sessionId, session.status);
     }
 
-    if (session.status !== "completed") {
+    if (session.status !== "completed" && session.status !== "failed") {
       throw new SessionNotResumableError(sessionId, session.status);
     }
 
     session.messages.push({ role: "user", content: userMessage });
     session.status = "active";
     session.completedAt = null;
+    session.iterationCount = 0;
 
     await this.deps.sessionRepository.save(session);
     return session;
