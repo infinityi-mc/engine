@@ -4,7 +4,7 @@ import type { TokenUsage } from "../../../llm/domain/ports/llm.types";
 import type { ToolRegistryPort } from "../../domain/ports/tool-registry.port";
 import type { SessionRepositoryPort } from "../../domain/ports/session-repository.port";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
-import type { AgentDefinition, AgentRunResult, AgentSession } from "../../domain/types/agent.types";
+import type { AgentDefinition, AgentRunResult, AgentSession, InvocationContext } from "../../domain/types/agent.types";
 import {
   MaxIterationsReachedError,
   SessionTimeoutError,
@@ -35,7 +35,7 @@ export class ToolUseLoop {
     definition: AgentDefinition,
     maxIterations: number,
     timeoutMs: number,
-    serverId?: string,
+    context?: InvocationContext,
   ): Promise<AgentRunResult> {
     const startedAt = Date.now();
     const toolDefinitions = this.deps.toolRegistry.getDefinitions(definition.tools);
@@ -106,7 +106,7 @@ export class ToolUseLoop {
       }
 
       // Execute tool calls in parallel
-      const toolResultMessages = await this.executeToolCalls(response.toolCalls, session.sessionId, definition.id, serverId);
+      const toolResultMessages = await this.executeToolCalls(response.toolCalls, session.sessionId, definition.id, context);
 
       // Append tool result messages
       session.messages.push(...toolResultMessages);
@@ -135,10 +135,10 @@ export class ToolUseLoop {
     toolCalls: ToolCall[],
     sessionId: string,
     agentId: string,
-    serverId?: string,
+    context?: InvocationContext,
   ): Promise<ChatMessage[]> {
     const results = await Promise.allSettled(
-      toolCalls.map((call) => this.executeSingleToolCall(call, sessionId, agentId, serverId)),
+      toolCalls.map((call) => this.executeSingleToolCall(call, sessionId, agentId, context)),
     );
 
     const messages: ChatMessage[] = [];
@@ -180,7 +180,7 @@ export class ToolUseLoop {
     call: ToolCall,
     sessionId: string,
     agentId: string,
-    serverId?: string,
+    context?: InvocationContext,
   ): Promise<{ output: string; isError?: boolean }> {
     const toolName = call.function.name;
     const tool = this.deps.toolRegistry.get(toolName);
@@ -212,7 +212,11 @@ export class ToolUseLoop {
       toolName,
     });
 
-    return await tool.execute(input, { agentId, ...(serverId !== undefined ? { serverId } : {}) });
+    return await tool.execute(input, {
+      agentId,
+      ...(context?.serverId !== undefined ? { serverId: context.serverId } : {}),
+      ...(context?.playerName !== undefined ? { playerName: context.playerName } : {}),
+    });
   }
 
   private buildResult(session: AgentSession, stopReason: string): AgentRunResult {

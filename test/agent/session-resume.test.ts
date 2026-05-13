@@ -15,6 +15,7 @@ import type { ConfigPort } from "../../src/shared/config/config.port";
 import type { LoggerPort } from "../../src/shared/observability/logger.port";
 import type { CompletionResponse } from "../../src/modules/llm/domain/ports/llm.types";
 import type { AgentDefinition } from "../../src/modules/agent/domain/types/agent.types";
+import type { PromptBuilder } from "../../src/modules/agent/application/prompt-builder";
 
 const testDefinition: AgentDefinition = {
   id: "test-agent",
@@ -67,6 +68,12 @@ function makeFakeToolRegistry(): ToolRegistryPort {
   };
 }
 
+function makeFakePromptBuilder(): PromptBuilder {
+  return {
+    build: async (definition: AgentDefinition) => definition.systemPrompt,
+  } as unknown as PromptBuilder;
+}
+
 function makeFakeDefinitionRepository(definitions: AgentDefinition[]): AgentDefinitionRepositoryPort {
   const map = new Map(definitions.map((d) => [d.id, d]));
   return {
@@ -106,6 +113,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     // First run — creates new session
@@ -144,6 +152,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     const result1 = await service1.run("test-agent", "First message");
@@ -157,6 +166,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     const result2 = await service2.run("test-agent", "After restart", { sessionId });
@@ -174,6 +184,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     await expect(service.run("test-agent", "Hello", { sessionId: "00000000-0000-4000-8000-000000000000" })).rejects.toThrow(
@@ -194,6 +205,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     const result = await service.run("test-agent", "Hello");
@@ -208,6 +220,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     await expect(service2.run("other-agent", "Hello", { sessionId })).rejects.toThrow(
@@ -241,6 +254,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     try {
@@ -258,6 +272,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     const result = await service2.run("test-agent", "Retry", { sessionId: capturedSessionId! });
@@ -279,6 +294,7 @@ describe("session resume", () => {
       sessionRepository,
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     // New session

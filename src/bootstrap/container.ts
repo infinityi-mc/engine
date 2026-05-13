@@ -91,6 +91,7 @@ import { AgentService } from "../modules/agent/application/agent.service";
 import { FileSessionRepository } from "../modules/agent/infrastructure/persistence/file-session-repository.adapter";
 import { MinecraftSessionManagerAdapter } from "../modules/agent/infrastructure/session/minecraft-session-manager.adapter";
 import { MinecraftAgentEventHandler } from "../modules/agent/application/events/minecraft-agent-event.handler";
+import { PromptBuilder } from "../modules/agent/application/prompt-builder";
 import type { SessionRepositoryPort } from "../modules/agent/domain/ports/session-repository.port";
 import { MinecraftRateLimiterAdapter } from "../modules/minecraft/infrastructure/rate-limit/minecraft-rate-limiter.adapter";
 import { MINECRAFT_LOG_PATTERN_MATCHED } from "../modules/minecraft/domain/events/minecraft-log-pattern-matched.event";
@@ -362,6 +363,10 @@ export async function createContainer(): Promise<AppContainer> {
     dataDir: path.join(dataDir, "sessions"),
     logger,
   });
+  const promptBuilder = new PromptBuilder({
+    minecraftRepository,
+    logger,
+  });
   const agentService = new AgentService({
     llmService,
     toolRegistry,
@@ -369,6 +374,7 @@ export async function createContainer(): Promise<AppContainer> {
     sessionRepository,
     config,
     logger,
+    promptBuilder,
   });
 
   // Minecraft agent integration

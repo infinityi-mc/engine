@@ -19,7 +19,7 @@ import {
   ProviderRateLimitError,
   ProviderTimeoutError,
 } from "../../../llm/domain/errors/llm.errors";
-import type { AgentDefinition } from "../../domain/types/agent.types";
+import type { AgentDefinition, InvocationContext } from "../../domain/types/agent.types";
 import { isValidUUID } from "../../../../shared/validation/uuid";
 
 export function registerAgentRoutes(
@@ -71,7 +71,19 @@ export function registerAgentRoutes(
         options.sessionId = body.sessionId;
       }
 
-      const result = await agentService.run(agentId.value, message.value, options);
+      const rawCtx = typeof body.context === "object" && body.context !== null && !Array.isArray(body.context)
+        ? body.context as Record<string, unknown>
+        : undefined;
+      const context: InvocationContext = {
+        ...(typeof rawCtx?.serverId === "string" && rawCtx.serverId.length > 0
+          ? { serverId: rawCtx.serverId }
+          : {}),
+        ...(typeof rawCtx?.playerName === "string" && rawCtx.playerName.length > 0
+          ? { playerName: rawCtx.playerName }
+          : {}),
+      };
+
+      const result = await agentService.run(agentId.value, message.value, options, context);
 
       return jsonResponse({
         sessionId: result.sessionId,

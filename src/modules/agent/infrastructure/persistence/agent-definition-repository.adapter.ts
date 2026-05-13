@@ -50,6 +50,7 @@ export class ConfigAgentDefinitionRepository implements AgentDefinitionRepositor
         name: agentConf.name,
         description: agentConf.description,
         systemPrompt,
+        ...(agentConf.context ? { context: agentConf.context } : {}),
         ...(agentConf.model ? { model: agentConf.model } : {}),
         tools: this.resolveTools(agentConf.tools, id),
         runtime: agentConf.runtime ?? "tool-use-loop",

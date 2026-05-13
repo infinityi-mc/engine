@@ -2,6 +2,17 @@ import type { ChatMessage, TokenUsage } from "../../../llm/domain/ports/llm.type
 
 export type AgentRuntime = "tool-use-loop" | "single-shot";
 
+export type ContextBlockType = "server" | "player" | "timestamp";
+
+export interface ContextBlockConfig {
+  readonly type: ContextBlockType;
+}
+
+export interface InvocationContext {
+  readonly serverId?: string;
+  readonly playerName?: string;
+}
+
 export interface AgentModelConfig {
   provider: string;
   model: string;
@@ -12,6 +23,7 @@ export interface AgentDefinition {
   readonly name: string;
   readonly description: string;
   readonly systemPrompt: string;
+  readonly context?: readonly ContextBlockConfig[];
   readonly model?: AgentModelConfig;
   readonly tools: readonly string[];
   readonly runtime: AgentRuntime;

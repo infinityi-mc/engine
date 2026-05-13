@@ -5,12 +5,13 @@ import type { SessionRepositoryPort } from "../domain/ports/session-repository.p
 import type { LoggerPort } from "../../../shared/observability/logger.port";
 import type { ConfigPort } from "../../../shared/config/config.port";
 import type { ChatMessage } from "../../llm/domain/ports/llm.types";
-import type { AgentDefinition, AgentRunResult, AgentSession } from "../domain/types/agent.types";
+import type { AgentDefinition, AgentRunResult, AgentSession, InvocationContext } from "../domain/types/agent.types";
 import {
   AgentNotFoundError,
   SessionNotFoundError,
   SessionNotResumableError,
 } from "../domain/errors/agent.errors";
+import type { PromptBuilder } from "./prompt-builder";
 import { ToolUseLoop } from "./runtime/tool-use-loop";
 import { SingleShotRuntime } from "./runtime/single-shot";
 
@@ -21,13 +22,13 @@ export interface AgentServiceDeps {
   readonly sessionRepository: SessionRepositoryPort;
   readonly config: ConfigPort;
   readonly logger: LoggerPort;
+  readonly promptBuilder: PromptBuilder;
 }
 
 export interface RunOptions {
   maxIterations?: number;
   timeoutMs?: number;
   sessionId?: string;
-  serverId?: string;
 }
 
 export class AgentService {
@@ -49,7 +50,7 @@ export class AgentService {
     });
   }
 
-  async run(agentId: string, userMessage: string, options?: RunOptions): Promise<AgentRunResult> {
+  async run(agentId: string, userMessage: string, options?: RunOptions, context?: InvocationContext): Promise<AgentRunResult> {
     const definition = await this.deps.agentDefinitions.get(agentId);
     if (!definition) {
       throw new AgentNotFoundError(agentId);
@@ -69,7 +70,8 @@ export class AgentService {
     if (options?.sessionId) {
       session = await this.resumeSession(options.sessionId, agentId, userMessage);
     } else {
-      session = this.createSession(definition, userMessage);
+      const resolvedPrompt = await this.deps.promptBuilder.build(definition, context ?? {});
+      session = this.createSession(definition.id, resolvedPrompt, userMessage);
       await this.deps.sessionRepository.save(session);
     }
 
@@ -80,10 +82,10 @@ export class AgentService {
     });
 
     if (definition.runtime === "single-shot") {
-      return this.singleShot.run(session, definition, options?.serverId);
+      return this.singleShot.run(session, definition);
     }
 
-    return this.toolUseLoop.run(session, definition, maxIterations, timeoutMs, options?.serverId);
+    return this.toolUseLoop.run(session, definition, maxIterations, timeoutMs, context);
   }
 
   async getDefinition(agentId: string): Promise<AgentDefinition | undefined> {
@@ -121,15 +123,15 @@ export class AgentService {
     return session;
   }
 
-  private createSession(definition: AgentDefinition, userMessage: string): AgentSession {
+  private createSession(agentId: string, systemPrompt: string, userMessage: string): AgentSession {
     const messages: ChatMessage[] = [
-      { role: "system", content: definition.systemPrompt },
+      { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
     ];
 
     return {
       sessionId: crypto.randomUUID(),
-      agentId: definition.id,
+      agentId,
       messages,
       status: "active",
       createdAt: Date.now(),

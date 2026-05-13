@@ -110,17 +110,16 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
       return;
     }
 
-    const formattedMessage = `[Server: ${serverId}] [${playerName}]: ${message}`;
-
     try {
       const runOptions = {
         ...(session !== null ? { sessionId: session.sessionId } : {}),
-        serverId,
       };
+      const invocationContext = { serverId, playerName };
       const result = await this.deps.agentService.run(
         definition.id,
-        formattedMessage,
+        message,
         runOptions,
+        invocationContext,
       );
 
       // Track session for future calls

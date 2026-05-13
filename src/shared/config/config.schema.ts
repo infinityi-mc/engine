@@ -11,10 +11,15 @@ const LlmConfigSchema = z.object({
   providers: z.record(z.string(), ProviderConfigSchema),
 });
 
+const ContextBlockSchema = z.object({
+  type: z.enum(["server", "player", "timestamp"]),
+});
+
 const AgentDefinitionSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   systemPrompt: z.string().min(1),
+  context: z.array(ContextBlockSchema).optional(),
   model: z.object({ provider: z.string(), model: z.string() }).optional(),
   tools: z.array(
     z.string().refine(

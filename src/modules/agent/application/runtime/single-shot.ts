@@ -17,7 +17,6 @@ export class SingleShotRuntime {
   async run(
     session: AgentSession,
     definition: AgentDefinition,
-    _serverId?: string,
   ): Promise<AgentRunResult> {
     try {
       const request: Parameters<typeof this.deps.llmService.complete>[0] = {

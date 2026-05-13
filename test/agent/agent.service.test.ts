@@ -9,6 +9,7 @@ import type { LoggerPort } from "../../src/shared/observability/logger.port";
 import type { SessionRepositoryPort } from "../../src/modules/agent/domain/ports/session-repository.port";
 import type { CompletionResponse, TokenUsage } from "../../src/modules/llm/domain/ports/llm.types";
 import type { AgentDefinition } from "../../src/modules/agent/domain/types/agent.types";
+import type { PromptBuilder } from "../../src/modules/agent/application/prompt-builder";
 
 const fakeUsage = (overrides?: Partial<TokenUsage>): TokenUsage => ({
   inputTokens: 10,
@@ -94,6 +95,12 @@ function makeFakeSessionRepository(): SessionRepositoryPort {
   };
 }
 
+function makeFakePromptBuilder(): PromptBuilder {
+  return {
+    build: async (definition: AgentDefinition) => definition.systemPrompt,
+  } as unknown as PromptBuilder;
+}
+
 describe("AgentService", () => {
   test("throws AgentNotFoundError for unknown agent id", async () => {
     const service = new AgentService({
@@ -103,6 +110,7 @@ describe("AgentService", () => {
       sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     await expect(service.run("unknown", "Hello")).rejects.toThrow(AgentNotFoundError);
@@ -120,6 +128,7 @@ describe("AgentService", () => {
       sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     const result = await service.run("single-shot-agent", "Hello");
@@ -142,6 +151,7 @@ describe("AgentService", () => {
       sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     const result = await service.run("test-agent", "Hello");
@@ -159,6 +169,7 @@ describe("AgentService", () => {
       sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     expect(await service.getDefinition("test-agent")).toEqual(testDefinition);
@@ -173,6 +184,7 @@ describe("AgentService", () => {
       sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     const list = await service.listDefinitions();
@@ -209,6 +221,7 @@ describe("AgentService", () => {
       sessionRepository: makeFakeSessionRepository(),
       config: makeFakeConfig(),
       logger: makeFakeLogger(),
+      promptBuilder: makeFakePromptBuilder(),
     });
 
     // With maxIterations=1, the loop should hit the limit after 1 iteration
