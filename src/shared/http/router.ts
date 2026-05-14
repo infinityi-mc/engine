@@ -19,6 +19,10 @@ export class Router {
     this.add("POST", pathname, handler);
   }
 
+  put(pathname: string, handler: RouteHandler): void {
+    this.add("PUT", pathname, handler);
+  }
+
   delete(pathname: string, handler: RouteHandler): void {
     this.add("DELETE", pathname, handler);
   }
@@ -29,6 +33,20 @@ export class Router {
 
   async handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // Basic CORS support
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
+
     const allowedMethods = new Set<string>();
 
     for (const route of this.routes) {
@@ -41,16 +59,22 @@ export class Router {
       allowedMethods.add(route.method);
 
       if (route.method === request.method) {
-        return route.handler(request, removeUndefinedParams(match.pathname.groups));
+        const response = await route.handler(request, removeUndefinedParams(match.pathname.groups));
+        response.headers.set("Access-Control-Allow-Origin", "*");
+        return response;
       }
     }
 
     if (allowedMethods.size > 0) {
       const allow = [...allowedMethods].sort().join(", ");
-      return jsonResponse({ error: "Method Not Allowed" }, { status: 405, headers: { allow } });
+      const response = jsonResponse({ error: "Method Not Allowed" }, { status: 405, headers: { allow } });
+      response.headers.set("Access-Control-Allow-Origin", "*");
+      return response;
     }
 
-    return jsonResponse({ error: "Not Found" }, { status: 404 });
+    const response = jsonResponse({ error: "Not Found" }, { status: 404 });
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    return response;
   }
 
   private add(method: string, pathname: string, handler: RouteHandler): void {

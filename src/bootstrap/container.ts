@@ -99,24 +99,6 @@ import { PromptBuilder } from "../modules/agent/application/prompt-builder";
 import type { SessionRepositoryPort } from "../modules/agent/domain/ports/session-repository.port";
 import { MinecraftRateLimiterAdapter } from "../modules/minecraft/infrastructure/rate-limit/minecraft-rate-limiter.adapter";
 import { MINECRAFT_LOG_PATTERN_MATCHED } from "../modules/minecraft/domain/events/minecraft-log-pattern-matched.event";
-import { FileMcdocLoader } from "../modules/mcdoc/infrastructure/persistence/file-mcdoc-loader";
-import { McdocRepository } from "../modules/mcdoc/application/mcdoc-repository";
-import { MCDOC_META_QUERY } from "../modules/mcdoc/application/queries/mcdoc-meta.query";
-import { McdocMetaHandler } from "../modules/mcdoc/application/queries/mcdoc-meta.query";
-import { LIST_MCDOC_PACKAGES_QUERY, ListMcdocPackagesHandler } from "../modules/mcdoc/application/queries/list-mcdoc-packages.query";
-import { SEARCH_MCDOC_QUERY, SearchMcdocHandler } from "../modules/mcdoc/application/queries/search-mcdoc.query";
-import { GET_MCDOC_SCHEMA_QUERY, GetMcdocSchemaHandler } from "../modules/mcdoc/application/queries/get-mcdoc-schema.query";
-import { GREP_MCDOC_FIELDS_QUERY, GrepMcdocFieldsHandler } from "../modules/mcdoc/application/queries/grep-mcdoc-fields.query";
-import { FIND_MCDOC_REFERENCES_QUERY, FindMcdocReferencesHandler } from "../modules/mcdoc/application/queries/find-mcdoc-references.query";
-import {
-  McdocMetaTool,
-  McdocListPackagesTool,
-  McdocSearchTool,
-  McdocGetTool,
-  McdocGrepFieldsTool,
-  McdocFindReferencesTool,
-} from "../modules/agent/infrastructure/tools/mcdoc-tools";
-import type { McdocRepositoryPort } from "../modules/mcdoc/domain/ports/mcdoc-repository.port";
 import { PrismarineNbtAdapter } from "../modules/minecraft/infrastructure/nbt/prismarine-nbt.adapter";
 import { FileSystemServerMetadataAdapter } from "../modules/minecraft/infrastructure/metadata/server-metadata.adapter";
 import {
@@ -162,7 +144,6 @@ export interface AppContainer {
   readonly agentService: AgentServiceType;
   readonly toolRegistry: ToolRegistryPort;
   readonly sessionRepository: SessionRepositoryPort;
-  readonly mcdocRepository: McdocRepositoryPort;
   readonly youtubeService: YoutubeServiceType;
   readonly audioPlayerService: AudioPlayerServiceType;
 }
@@ -360,20 +341,6 @@ export async function createContainer(): Promise<AppContainer> {
 
   const llmService = new LlmService(providers, config, logger);
 
-  // Mcdoc module — loads + indexes the Minecraft schema registry at startup.
-  const mcdocLoader = new FileMcdocLoader({
-    symbolPath: path.join(dataDir, "minecraft", "symbol.json"),
-    indexDir: path.join(dataDir, "minecraft", "mcdoc-index"),
-    logger,
-  });
-  const mcdocRepository = await McdocRepository.create(mcdocLoader, logger);
-
-  queryBus.register(MCDOC_META_QUERY, new McdocMetaHandler(mcdocRepository));
-  queryBus.register(LIST_MCDOC_PACKAGES_QUERY, new ListMcdocPackagesHandler(mcdocRepository));
-  queryBus.register(SEARCH_MCDOC_QUERY, new SearchMcdocHandler(mcdocRepository));
-  queryBus.register(GET_MCDOC_SCHEMA_QUERY, new GetMcdocSchemaHandler(mcdocRepository));
-  queryBus.register(GREP_MCDOC_FIELDS_QUERY, new GrepMcdocFieldsHandler(mcdocRepository));
-  queryBus.register(FIND_MCDOC_REFERENCES_QUERY, new FindMcdocReferencesHandler(mcdocRepository));
 
   // YouTube module — low-level search, metadata, and download surfaces only.
   const youtubeBinaryManager = new YoutubeDlpBinaryManager({
@@ -413,12 +380,6 @@ export async function createContainer(): Promise<AppContainer> {
   const toolRegistry = new InMemoryToolRegistry(logger);
   toolRegistry.register(new RunPythonTool(terminal, logger));
   toolRegistry.register(new ReadMinecraftLogsTool(minecraftRepository, logger));
-  toolRegistry.register(new McdocMetaTool(mcdocRepository, logger));
-  toolRegistry.register(new McdocListPackagesTool(mcdocRepository, logger));
-  toolRegistry.register(new McdocSearchTool(mcdocRepository, logger));
-  toolRegistry.register(new McdocGetTool(mcdocRepository, logger));
-  toolRegistry.register(new McdocGrepFieldsTool(mcdocRepository, logger));
-  toolRegistry.register(new McdocFindReferencesTool(mcdocRepository, logger));
   toolRegistry.register(new NbtReadTool(nbtAdapter, logger));
   toolRegistry.register(new NbtGetTool(nbtAdapter, logger));
   toolRegistry.register(new NbtSearchTool(nbtAdapter, logger));
@@ -487,7 +448,6 @@ export async function createContainer(): Promise<AppContainer> {
     agentService,
     toolRegistry,
     sessionRepository,
-    mcdocRepository,
     youtubeService,
     audioPlayerService,
   };

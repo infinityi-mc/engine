@@ -5,7 +5,6 @@ import { registerSystemRoutes } from "./modules/system/infrastructure/http/syste
 import { registerServerRoutes } from "./modules/server/infrastructure/http/server-routes";
 import { registerMinecraftRoutes } from "./modules/minecraft/infrastructure/http/minecraft-routes";
 import { registerAgentRoutes } from "./modules/agent/infrastructure/http/agent-routes";
-import { registerMcdocRoutes } from "./modules/mcdoc/infrastructure/http/mcdoc-routes";
 import { registerAudioPlayerRoutes } from "./modules/audioplayer/infrastructure/http/audioplayer-routes";
 
 const port = Number(Bun.env.PORT ?? 3000);
@@ -40,12 +39,6 @@ registerMinecraftRoutes(
 registerAgentRoutes(
   router,
   container.agentService,
-  container.guard,
-  container.logger,
-);
-registerMcdocRoutes(
-  router,
-  container.queryBus,
   container.guard,
   container.logger,
 );

@@ -61,12 +61,6 @@ scopes: `infrastructure/http/scopes.ts`
 | `minecraft_metadata` | `minecraft` | `infrastructure/tools/minecraft-metadata.tool.ts` |
 | `get_player_info` | `minecraft` | `infrastructure/tools/get-player-info.tool.ts` |
 | `send_minecraft_commands` | `minecraft` | `infrastructure/tools/send-minecraft-commands.tool.ts` |
-| `mcdoc_meta` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
-| `mcdoc_list_packages` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
-| `mcdoc_search` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
-| `mcdoc_get` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
-| `mcdoc_grep_fields` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
-| `mcdoc_find_references` | `mcdoc` | `infrastructure/tools/mcdoc-tools.ts` |
 | `nbt_read` | `nbt` | `infrastructure/tools/nbt-tools.ts` |
 | `nbt_get` | `nbt` | `infrastructure/tools/nbt-tools.ts` |
 | `nbt_search` | `nbt` | `infrastructure/tools/nbt-tools.ts` |
@@ -102,7 +96,6 @@ handled:
 consumes:
   `llm` module `LlmService`
   `minecraft` module repository, stdin, log, metadata/player-data queries, NBT, and `minecraft.log.pattern_matched`
-  `mcdoc` module repository for mcdoc tools
   `system` module terminal port for `run_python`
   `server` module registry for Minecraft command tools
   `ConfigPort`    `../../shared/config/config.port.ts`
