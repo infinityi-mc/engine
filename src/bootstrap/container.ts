@@ -131,6 +131,8 @@ import type { McdocService as McdocServiceType } from "../modules/mcdoc/applicat
 import { McdocService } from "../modules/mcdoc/application/mcdoc.service";
 import { SpyglassMcApiAdapter } from "../modules/mcdoc/infrastructure/api/spyglassmc-api.adapter";
 import { JsonMcdocStorageAdapter } from "../modules/mcdoc/infrastructure/storage/json-mcdoc-storage.adapter";
+import { GoogleGeminiMcdocEmbeddingAdapter } from "../modules/mcdoc/infrastructure/embedding/google-gemini-mcdoc-embedding.adapter";
+import { McdocAnswerTool, McdocRetrieveTool, McdocSearchTool } from "../modules/agent/infrastructure/tools/mcdoc-tools";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -346,6 +348,25 @@ export async function createContainer(): Promise<AppContainer> {
 
   const llmService = new LlmService(providers, config, logger);
 
+  // Mcdoc module — SpyglassMC API data fetcher, cache, and RAG index.
+  const mcdocApi = new SpyglassMcApiAdapter({ logger });
+  const mcdocStorage = new JsonMcdocStorageAdapter({ dataDir, logger });
+  const googleProviderConfig = llmConfig.providers.google;
+  const mcdocEmbedder = googleProviderConfig?.apiKey
+    ? new GoogleGeminiMcdocEmbeddingAdapter({
+      apiKey: googleProviderConfig.apiKey,
+      baseUrl: googleProviderConfig.baseUrl,
+    })
+    : undefined;
+  const mcdocService = new McdocService({
+    api: mcdocApi,
+    storage: mcdocStorage,
+    config,
+    logger,
+    ...(mcdocEmbedder ? { embedder: mcdocEmbedder } : {}),
+    llmService,
+  });
+
 
   // YouTube module — low-level search, metadata, and download surfaces only.
   const youtubeBinaryManager = new YoutubeDlpBinaryManager({
@@ -399,6 +420,9 @@ export async function createContainer(): Promise<AppContainer> {
   toolRegistry.register(new DownloadMusicTool(audioPlayerService));
   toolRegistry.register(new DeleteMusicTool(audioPlayerService));
   toolRegistry.register(new ListMusicTool(audioPlayerService));
+  toolRegistry.register(new McdocSearchTool(mcdocService));
+  toolRegistry.register(new McdocRetrieveTool(mcdocService));
+  toolRegistry.register(new McdocAnswerTool(mcdocService));
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);
   const sessionRepository = new FileSessionRepository({
@@ -436,11 +460,6 @@ export async function createContainer(): Promise<AppContainer> {
     logger,
   });
   eventBus.subscribe(MINECRAFT_LOG_PATTERN_MATCHED, minecraftAgentEventHandler);
-
-  // Mcdoc module — SpyglassMC API data fetcher and cache
-  const mcdocApi = new SpyglassMcApiAdapter({ logger });
-  const mcdocStorage = new JsonMcdocStorageAdapter({ dataDir, logger });
-  const mcdocService = new McdocService({ api: mcdocApi, storage: mcdocStorage, config, logger });
 
   return {
     commandBus,

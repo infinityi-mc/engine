@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
+    "scratch:mcdoc-rag": "bun scripts/scratch-mcdoc-rag-convert.ts",
+    "scratch:mcdoc-rag:migrate-vectors": "bun scripts/scratch-mcdoc-rag-migrate-vectors.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
   },
