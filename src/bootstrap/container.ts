@@ -127,6 +127,10 @@ import {
   SearchMusicTool,
   StopMusicTool,
 } from "../modules/agent/infrastructure/tools/audioplayer-tools";
+import type { McdocService as McdocServiceType } from "../modules/mcdoc/application/mcdoc.service";
+import { McdocService } from "../modules/mcdoc/application/mcdoc.service";
+import { SpyglassMcApiAdapter } from "../modules/mcdoc/infrastructure/api/spyglassmc-api.adapter";
+import { JsonMcdocStorageAdapter } from "../modules/mcdoc/infrastructure/storage/json-mcdoc-storage.adapter";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -146,6 +150,7 @@ export interface AppContainer {
   readonly sessionRepository: SessionRepositoryPort;
   readonly youtubeService: YoutubeServiceType;
   readonly audioPlayerService: AudioPlayerServiceType;
+  readonly mcdocService: McdocServiceType;
 }
 
 export async function createContainer(): Promise<AppContainer> {
@@ -432,6 +437,11 @@ export async function createContainer(): Promise<AppContainer> {
   });
   eventBus.subscribe(MINECRAFT_LOG_PATTERN_MATCHED, minecraftAgentEventHandler);
 
+  // Mcdoc module — SpyglassMC API data fetcher and cache
+  const mcdocApi = new SpyglassMcApiAdapter({ logger });
+  const mcdocStorage = new JsonMcdocStorageAdapter({ dataDir, logger });
+  const mcdocService = new McdocService({ api: mcdocApi, storage: mcdocStorage, logger });
+
   return {
     commandBus,
     eventBus,
@@ -450,5 +460,6 @@ export async function createContainer(): Promise<AppContainer> {
     sessionRepository,
     youtubeService,
     audioPlayerService,
+    mcdocService,
   };
 }

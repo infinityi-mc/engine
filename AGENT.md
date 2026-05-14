@@ -67,6 +67,7 @@ web entry: `apps/web/src/routes/`, SvelteKit static adapter
 audioPlayer `src/modules/audioplayer/` downloaded music store, YouTube-backed downloads, Minecraft audioplayer playback API
 agent `src/modules/agent/` agent definitions, sessions, runtimes, tools, HTTP agent API
 llm `src/modules/llm/` provider abstraction and OpenAI-compatible/Anthropic/Gemini adapters
+mcdoc `src/modules/mcdoc/` SpyglassMC API fetcher, Minecraft technical knowledge cache for RAG
 minecraft `src/modules/minecraft/` Minecraft server definitions, lifecycle, logs, metadata, in-game events
 server `src/modules/server/` long-running process spawn/kill/status registry
 system `src/modules/system/` filesystem, search, text transforms, terminal execution
