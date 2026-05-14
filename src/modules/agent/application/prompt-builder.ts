@@ -98,8 +98,8 @@ export class PromptBuilder {
 
     return {
       type: "player",
-      label: "Calling Player",
-      content: `Player: ${sanitizeContextValue(ctx.playerName)}`,
+      label: "You are talking with",
+      content: `${sanitizeContextValue(ctx.playerName)}`,
     };
   }
 

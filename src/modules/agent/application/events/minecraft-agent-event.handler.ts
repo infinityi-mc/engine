@@ -92,7 +92,7 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
 
     let session;
     try {
-      session = await this.deps.sessionManager.get(serverId);
+      session = await this.deps.sessionManager.get(serverId, agentName);
     } catch (error) {
       this.deps.logger.warn("minecraft.agent_handler.session_error", {
         module: "minecraft",
@@ -123,10 +123,10 @@ export class MinecraftAgentEventHandler implements EventHandler<MinecraftLogPatt
       );
 
       // Track session for future calls
-      this.deps.sessionManager.track(serverId, result.sessionId);
+      this.deps.sessionManager.track(serverId, agentName, result.sessionId);
 
       // Trim session to message cap (agent service already saved it, so reload-trim-save)
-      const updatedSession = await this.deps.sessionManager.get(serverId);
+      const updatedSession = await this.deps.sessionManager.get(serverId, agentName);
       if (updatedSession) {
         this.deps.sessionManager.trim(updatedSession);
         await this.deps.sessionManager.save(updatedSession);

@@ -14,30 +14,36 @@ export class MinecraftSessionManagerAdapter implements MinecraftSessionManagerPo
 
   constructor(private readonly deps: MinecraftSessionManagerAdapterDeps) {}
 
-  async get(serverId: string): Promise<AgentSession | null> {
-    const sessionId = this.serverSessions.get(serverId);
+  private sessionKey(serverId: string, agentId: string): string {
+    return `${serverId}:${agentId}`;
+  }
+
+  async get(serverId: string, agentId: string): Promise<AgentSession | null> {
+    const key = this.sessionKey(serverId, agentId);
+    const sessionId = this.serverSessions.get(key);
     if (sessionId === undefined) return null;
 
-    const lastActive = this.lastActivity.get(serverId);
+    const lastActive = this.lastActivity.get(key);
     if (lastActive !== undefined && Date.now() - lastActive >= this.deps.sessionTtlMs) {
-      this.serverSessions.delete(serverId);
-      this.lastActivity.delete(serverId);
+      this.serverSessions.delete(key);
+      this.lastActivity.delete(key);
       return null;
     }
 
     const session = await this.deps.sessionRepository.load(sessionId);
     if (session === null) {
-      this.serverSessions.delete(serverId);
-      this.lastActivity.delete(serverId);
+      this.serverSessions.delete(key);
+      this.lastActivity.delete(key);
       return null;
     }
 
     return session;
   }
 
-  track(serverId: string, sessionId: string): void {
-    this.serverSessions.set(serverId, sessionId);
-    this.lastActivity.set(serverId, Date.now());
+  track(serverId: string, agentId: string, sessionId: string): void {
+    const key = this.sessionKey(serverId, agentId);
+    this.serverSessions.set(key, sessionId);
+    this.lastActivity.set(key, Date.now());
   }
 
   async save(session: AgentSession): Promise<void> {

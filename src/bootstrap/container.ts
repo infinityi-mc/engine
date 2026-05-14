@@ -132,7 +132,7 @@ import { McdocService } from "../modules/mcdoc/application/mcdoc.service";
 import { SpyglassMcApiAdapter } from "../modules/mcdoc/infrastructure/api/spyglassmc-api.adapter";
 import { JsonMcdocStorageAdapter } from "../modules/mcdoc/infrastructure/storage/json-mcdoc-storage.adapter";
 import { GoogleGeminiMcdocEmbeddingAdapter } from "../modules/mcdoc/infrastructure/embedding/google-gemini-mcdoc-embedding.adapter";
-import { McdocAnswerTool, McdocRetrieveTool, McdocSearchTool } from "../modules/agent/infrastructure/tools/mcdoc-tools";
+import { McdocRetrieveTool, McdocSearchTool } from "../modules/agent/infrastructure/tools/mcdoc-tools";
 
 export interface AppContainer {
   readonly commandBus: CommandBus;
@@ -240,6 +240,7 @@ export async function createContainer(): Promise<AppContainer> {
   );
 
   patternRegistry.register("@ai", { action: "invoke_agent", payload: { agentName: "minecraft-ingame" } });
+  patternRegistry.register("@music", { action: "invoke_agent", payload: { agentName: "music" } });
 
   const nbtAdapter = new PrismarineNbtAdapter(logger);
   const serverMetadata = new FileSystemServerMetadataAdapter(nbtAdapter, logger);
@@ -422,7 +423,7 @@ export async function createContainer(): Promise<AppContainer> {
   toolRegistry.register(new ListMusicTool(audioPlayerService));
   toolRegistry.register(new McdocSearchTool(mcdocService));
   toolRegistry.register(new McdocRetrieveTool(mcdocService));
-  toolRegistry.register(new McdocAnswerTool(mcdocService));
+
 
   const agentDefinitions = new ConfigAgentDefinitionRepository(config, toolRegistry, logger);
   const sessionRepository = new FileSessionRepository({

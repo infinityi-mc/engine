@@ -126,19 +126,41 @@ export class MinecraftLogListener implements LogListenerPort {
     const config = this.teamConfigs.get(serverId);
     if (config === undefined) return rawContent;
 
-    let name = rawContent;
+    let name = rawContent.trim();
 
     for (const prefix of config.prefixes) {
+      const bracketed = `[${prefix}]`;
+      if (name.startsWith(bracketed)) {
+        const stripped = name.slice(bracketed.length).trimStart();
+        if (stripped.length > 0) {
+          name = stripped;
+          break;
+        }
+      }
       if (name.startsWith(prefix)) {
-        name = name.slice(prefix.length);
-        break;
+        const stripped = name.slice(prefix.length).trimStart();
+        if (stripped.length > 0) {
+          name = stripped;
+          break;
+        }
       }
     }
 
     for (const suffix of config.suffixes) {
+      const bracketed = `[${suffix}]`;
+      if (name.endsWith(bracketed)) {
+        const stripped = name.slice(0, -bracketed.length).trimEnd();
+        if (stripped.length > 0) {
+          name = stripped;
+          break;
+        }
+      }
       if (name.endsWith(suffix)) {
-        name = name.slice(0, -suffix.length);
-        break;
+        const stripped = name.slice(0, -suffix.length).trimEnd();
+        if (stripped.length > 0) {
+          name = stripped;
+          break;
+        }
       }
     }
 
