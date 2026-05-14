@@ -74,7 +74,7 @@ function readFilters(value: unknown): McdocRagFilters | undefined {
 export class McdocSearchTool implements Tool {
   readonly name = "mcdoc_search";
   readonly description = "Search cached SpyglassMC mcdoc technical knowledge for Minecraft commands, registries, block states, versions, and mcdoc symbols.";
-  readonly groups = ["minecraft", "mcdoc"] as const;
+  readonly groups = ["mcdoc"] as const;
   readonly inputSchema: Record<string, unknown> = {
     type: "object",
     properties: {
@@ -106,7 +106,7 @@ export class McdocSearchTool implements Tool {
 export class McdocRetrieveTool implements Tool {
   readonly name = "mcdoc_retrieve";
   readonly description = "Retrieve one exact mcdoc RAG document by ID returned from mcdoc_search.";
-  readonly groups = ["minecraft", "mcdoc"] as const;
+  readonly groups = ["mcdoc"] as const;
   readonly inputSchema: Record<string, unknown> = {
     type: "object",
     properties: {
@@ -137,7 +137,7 @@ export class McdocRetrieveTool implements Tool {
 export class McdocAnswerTool implements Tool {
   readonly name = "mcdoc_answer";
   readonly description = "Answer a Minecraft technical question using cached SpyglassMC mcdoc RAG context with citations.";
-  readonly groups = ["minecraft", "mcdoc"] as const;
+  readonly groups = ["mcdoc"] as const;
   readonly inputSchema: Record<string, unknown> = {
     type: "object",
     properties: {

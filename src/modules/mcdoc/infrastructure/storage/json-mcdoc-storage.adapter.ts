@@ -56,18 +56,25 @@ export class JsonMcdocStorageAdapter implements McdocStoragePort {
   }
 
   async loadVersionData(): Promise<McdocVersionData | undefined> {
-    const [metadata, blockStates, commands, registries] = await Promise.all([
+    const [metadata, blockStates, commands, registries, versions] = await Promise.all([
       this.readJson<Metadata>(path.join(this.basePath, "metadata.json")),
       this.readJson<unknown>(path.join(this.basePath, "block_states.json")),
       this.readJson<unknown>(path.join(this.basePath, "commands.json")),
       this.readJson<unknown>(path.join(this.basePath, "registries.json")),
+      this.readJson<readonly McdocVersion[]>(path.join(this.basePath, "versions.json")),
     ]);
 
-    if (!metadata || (blockStates === undefined && commands === undefined && registries === undefined)) {
+    if (blockStates === undefined && commands === undefined && registries === undefined) {
       return undefined;
     }
 
-    return { version: metadata.version, blockStates, commands, registries };
+    const version = metadata?.version
+      ?? versions?.find((v) => v.stable && v.type === "release")?.id
+      ?? versions?.[0]?.id;
+
+    if (!version) return undefined;
+
+    return { version, blockStates, commands, registries };
   }
 
   async saveRagIndex(index: McdocRagIndex): Promise<void> {

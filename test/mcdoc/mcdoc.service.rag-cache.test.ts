@@ -137,7 +137,7 @@ describe("McdocService RAG cache", () => {
     await service.searchRag("stone_1.21.8");
 
     expect(embedder.documentCalls).toBe(1);
-    expect(embedder.queryCalls).toBe(1);
+    expect(embedder.queryCalls).toBe(0);
     expect(storage.ragIndex?.manifest.storageFormat).toBe("f32-binary");
     expect(storage.ragIndex?.manifest.vectorDimensions).toBe(3);
   });

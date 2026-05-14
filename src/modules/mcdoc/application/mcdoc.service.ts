@@ -313,13 +313,17 @@ export class McdocService {
   private async getRetriever(): Promise<McdocRagRetriever> {
     const index = await this.getRagIndex();
     if (!this.ragRetriever) {
-      this.ragRetriever = new McdocRagRetriever(index, this.embedder);
+      this.ragRetriever = new McdocRagRetriever(index);
     }
     return this.ragRetriever;
   }
 
   private async getRagIndex(): Promise<McdocRagIndex> {
-    if (this.ragIndex) return this.ragIndex;
+    if (this.ragIndex) {
+      if (await this.isRagIndexFresh(this.ragIndex)) return this.ragIndex;
+      this.ragIndex = undefined;
+      this.ragRetriever = undefined;
+    }
 
     if (this.ragIndexRefreshPromise) {
       const refreshed = await this.ragIndexRefreshPromise;
@@ -327,13 +331,19 @@ export class McdocService {
     }
 
     const stored = await this.storage.loadRagIndex();
-    if (stored) {
+    if (stored && await this.isRagIndexFresh(stored)) {
       this.setRagIndex(stored);
       return stored;
     }
 
     if (this.ragIndexBuildPromise) return this.ragIndexBuildPromise;
     return this.rebuildRagIndex();
+  }
+
+  private async isRagIndexFresh(index: McdocRagIndex): Promise<boolean> {
+    if (index.manifest.sourceVersion) return true;
+    const versionData = await this.storage.loadVersionData();
+    return !versionData;
   }
 
   private setRagIndex(index: McdocRagIndex): void {
