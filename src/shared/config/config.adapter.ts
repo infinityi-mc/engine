@@ -64,6 +64,10 @@ export class ConfigAdapter implements ConfigPort {
     return this.config.audioPlayer;
   }
 
+  getMcdocConfig(): { version?: string | undefined } {
+    return this.config.mcdoc ?? {};
+  }
+
   getApiKey(provider: string): string {
     const p = this.config.llm.providers[provider];
     if (!p) {

@@ -58,9 +58,14 @@ const AudioPlayerConfigSchema = z.object({
   searchLimit: z.number().positive().default(AUDIO_PLAYER_DEFAULTS.searchLimit),
 });
 
+const McdocConfigSchema = z.object({
+  version: z.string().optional(),
+});
+
 export const ConfigSchema = z.object({
   llm: LlmConfigSchema,
   agent: AgentConfigSchema.optional(),
   minecraft: MinecraftConfigSchema.optional(),
+  mcdoc: McdocConfigSchema.default({}),
   audioPlayer: AudioPlayerConfigSchema.default(AUDIO_PLAYER_DEFAULTS),
 });

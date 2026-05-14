@@ -1,31 +1,43 @@
 import type { LoggerPort } from "../../../shared/observability/logger.port";
 import type { McdocApiPort } from "../domain/ports/mcdoc-api.port";
 import type { McdocStoragePort } from "../domain/ports/mcdoc-storage.port";
-import type { McdocVersion, McdocSymbols, McdocVersionData } from "../domain/types/mcdoc";
+import type { McdocSymbols, McdocVersionData } from "../domain/types/mcdoc";
 
 export interface McdocServiceInput {
   readonly api: McdocApiPort;
   readonly storage: McdocStoragePort;
+  readonly config: { getMcdocConfig(): { version?: string | undefined } };
   readonly logger: LoggerPort;
 }
 
 export class McdocService {
   private readonly api: McdocApiPort;
   private readonly storage: McdocStoragePort;
+  private readonly config: { getMcdocConfig(): { version?: string | undefined } };
   private readonly logger: LoggerPort;
 
   constructor(input: McdocServiceInput) {
     this.api = input.api;
     this.storage = input.storage;
+    this.config = input.config;
     this.logger = input.logger;
   }
 
-  async fetchVersions(): Promise<McdocVersion[]> {
-    this.logger.info("mcdoc.fetch_versions.start");
+  async resolveVersion(): Promise<string> {
+    const configured = this.config.getMcdocConfig().version;
+    if (configured) {
+      this.logger.info("mcdoc.resolve_version.from_config", { version: configured });
+      return configured;
+    }
+
+    this.logger.info("mcdoc.resolve_version.fetching_latest");
     const versions = await this.api.fetchVersions();
-    await this.storage.saveVersions(versions);
-    this.logger.info("mcdoc.fetch_versions.done", { count: versions.length });
-    return versions;
+    const latest = versions.find((v) => v.stable && v.type === "release");
+    if (!latest) {
+      throw new Error("No stable release version found from SpyglassMC API");
+    }
+    this.logger.info("mcdoc.resolve_version.latest", { version: latest.id });
+    return latest.id;
   }
 
   async fetchSymbols(): Promise<McdocSymbols> {
@@ -37,7 +49,8 @@ export class McdocService {
     return symbols;
   }
 
-  async fetchVersionData(version: string): Promise<McdocVersionData> {
+  async fetchVersionData(): Promise<{ version: string; data: McdocVersionData }> {
+    const version = await this.resolveVersion();
     this.logger.info("mcdoc.fetch_version_data.start", { version });
 
     const [blockStates, commands, registries] = await Promise.all([
@@ -46,25 +59,17 @@ export class McdocService {
       this.api.fetchRegistries(version),
     ]);
 
-    const data: McdocVersionData = { blockStates, commands, registries };
-    await this.storage.saveVersionData(version, data);
+    await this.storage.saveVersionData(version, { blockStates, commands, registries });
+    const data: McdocVersionData = { version, blockStates, commands, registries };
     this.logger.info("mcdoc.fetch_version_data.done", { version });
-    return data;
-  }
-
-  async getVersions(): Promise<McdocVersion[] | undefined> {
-    return this.storage.loadVersions();
+    return { version, data };
   }
 
   async getSymbols(): Promise<McdocSymbols | undefined> {
     return this.storage.loadSymbols();
   }
 
-  async getVersionData(version: string): Promise<McdocVersionData | undefined> {
-    return this.storage.loadVersionData(version);
-  }
-
-  async listCachedVersions(): Promise<string[]> {
-    return this.storage.listStoredVersions();
+  async getVersionData(): Promise<McdocVersionData | undefined> {
+    return this.storage.loadVersionData();
   }
 }

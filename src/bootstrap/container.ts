@@ -440,7 +440,7 @@ export async function createContainer(): Promise<AppContainer> {
   // Mcdoc module — SpyglassMC API data fetcher and cache
   const mcdocApi = new SpyglassMcApiAdapter({ logger });
   const mcdocStorage = new JsonMcdocStorageAdapter({ dataDir, logger });
-  const mcdocService = new McdocService({ api: mcdocApi, storage: mcdocStorage, logger });
+  const mcdocService = new McdocService({ api: mcdocApi, storage: mcdocStorage, config, logger });
 
   return {
     commandBus,

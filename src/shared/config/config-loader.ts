@@ -33,6 +33,7 @@ const DEFAULT_CONFIG: AppConfig = {
       },
     },
   },
+  mcdoc: {},
   audioPlayer: AUDIO_PLAYER_DEFAULTS,
 };
 
@@ -100,6 +101,7 @@ function resolveEnvVars(config: AppConfig): AppConfig {
     },
     ...(config.agent ? { agent: config.agent } : {}),
     ...(config.minecraft ? { minecraft: config.minecraft } : {}),
+    mcdoc: config.mcdoc,
     audioPlayer: config.audioPlayer,
   };
 }
@@ -148,6 +150,7 @@ function resolveDefaults(): ConfigLoaderResult {
         ...DEFAULT_CONFIG.llm,
         providers: resolvedProviders,
       },
+      mcdoc: {},
       audioPlayer: DEFAULT_CONFIG.audioPlayer,
       minecraft: {},
     },

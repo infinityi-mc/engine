@@ -28,17 +28,26 @@ outbound:
 
 | Method | Effect |
 |--------|--------|
-| `fetchVersions()` | Fetch version list from API, persist, return |
+| `resolveVersion()` | Return configured version or fetch API to find latest stable release |
 | `fetchSymbols()` | Fetch mcdoc symbols from API, persist, return |
-| `fetchVersionData(version)` | Fetch block_states, commands, registries for a version, persist, return |
-| `getVersions()` | Load versions from local storage |
+| `fetchVersionData()` | Fetch block_states, commands, registries for resolved version, persist, return |
 | `getSymbols()` | Load symbols from local storage |
-| `getVersionData(version)` | Load version data from local storage |
-| `listCachedVersions()` | List version directories on disk |
+| `getVersionData()` | Load version data from local storage |
+
+## Configuration
+
+Single version only. Set in `config.yaml`:
+
+```yaml
+mcdoc:
+  version: "26.1.2"   # optional, defaults to latest stable release
+```
+
+When `version` is omitted, `resolveVersion()` fetches `/mcje/versions` and picks the first entry where `stable === true && type === "release"`.
 
 ## API Endpoints
 
-- `GET https://api.spyglassmc.com/mcje/versions` — version list
+- `GET https://api.spyglassmc.com/mcje/versions` — version list (for resolution)
 - `GET https://api.spyglassmc.com/vanilla-mcdoc/symbols` — mcdoc symbols
 - `GET https://api.spyglassmc.com/mcje/versions/{version}/block_states` — block states
 - `GET https://api.spyglassmc.com/mcje/versions/{version}/commands` — commands
@@ -48,30 +57,27 @@ outbound:
 
 ```
 data/mcdoc/spyglassmc/
-├── versions.json              # Cached version list
-├── symbols.json               # Cached mcdoc symbols
-├── {version}/                 # Per-version directory
-│   ├── block_states.json
-│   ├── commands.json
-│   └── registries.json
+├── versions.json       # Cached version list (from resolution)
+├── symbols.json        # Cached mcdoc symbols
+├── block_states.json   # Block states for active version
+├── commands.json       # Commands for active version
+└── registries.json     # Registries for active version
 ```
 
 ## Runtime Rules
 
-- Large API responses (symbols, block_states, commands, registries) are streamed to a temp file, then parsed.
+- Single-version design — one set of version data files at a time.
+- Large API responses are streamed to a temp file, then parsed with try/finally cleanup.
 - Storage uses atomic writes (temp file + rename).
-- API responses are validated with Zod at the infrastructure boundary.
-- Domain types use camelCase; API responses use snake_case — transformation happens in the API adapter.
+- API responses validated with Zod at the infrastructure boundary.
+- Domain types use camelCase; API responses use snake_case — transformation in API adapter.
 - No HTTP routes exposed; consumed internally via `McdocService` on the container.
 
 ## Dependencies
 
 consumes:
+  `ConfigPort`   `../../shared/config/config.port.ts`
   `LoggerPort`   `../../shared/observability/logger.port.ts`
 
 consumed-by:
   `agent` module (future RAG tool integration)
-
-## Tests
-
-(To be added)

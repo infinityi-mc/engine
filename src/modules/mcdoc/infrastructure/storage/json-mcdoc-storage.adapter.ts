@@ -1,12 +1,16 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { LoggerPort } from "../../../../shared/observability/logger.port";
 import type { McdocStoragePort } from "../../domain/ports/mcdoc-storage.port";
-import type { McdocVersion, McdocSymbols, McdocVersionData } from "../../domain/types/mcdoc";
+import type { McdocSymbols, McdocVersionData } from "../../domain/types/mcdoc";
 
 export interface JsonMcdocStorageAdapterInput {
   readonly dataDir: string;
   readonly logger: LoggerPort;
+}
+
+interface Metadata {
+  version: string;
 }
 
 export class JsonMcdocStorageAdapter implements McdocStoragePort {
@@ -18,14 +22,6 @@ export class JsonMcdocStorageAdapter implements McdocStoragePort {
     this.logger = input.logger;
   }
 
-  async saveVersions(versions: McdocVersion[]): Promise<void> {
-    await this.writeJson(path.join(this.basePath, "versions.json"), versions);
-  }
-
-  async loadVersions(): Promise<McdocVersion[] | undefined> {
-    return this.readJson<McdocVersion[]>(path.join(this.basePath, "versions.json"));
-  }
-
   async saveSymbols(symbols: McdocSymbols): Promise<void> {
     await this.writeJson(path.join(this.basePath, "symbols.json"), symbols);
   }
@@ -34,43 +30,29 @@ export class JsonMcdocStorageAdapter implements McdocStoragePort {
     return this.readJson<McdocSymbols>(path.join(this.basePath, "symbols.json"));
   }
 
-  async saveVersionData(version: string, data: McdocVersionData): Promise<void> {
-    const dir = path.join(this.basePath, version);
-    await mkdir(dir, { recursive: true });
+  async saveVersionData(version: string, data: Omit<McdocVersionData, "version">): Promise<void> {
+    await mkdir(this.basePath, { recursive: true });
     await Promise.all([
-      this.writeJson(path.join(dir, "block_states.json"), data.blockStates),
-      this.writeJson(path.join(dir, "commands.json"), data.commands),
-      this.writeJson(path.join(dir, "registries.json"), data.registries),
+      this.writeJson(path.join(this.basePath, "metadata.json"), { version }),
+      this.writeJson(path.join(this.basePath, "block_states.json"), data.blockStates),
+      this.writeJson(path.join(this.basePath, "commands.json"), data.commands),
+      this.writeJson(path.join(this.basePath, "registries.json"), data.registries),
     ]);
   }
 
-  async loadVersionData(version: string): Promise<McdocVersionData | undefined> {
-    const dir = path.join(this.basePath, version);
-    const [blockStates, commands, registries] = await Promise.all([
-      this.readJson<unknown>(path.join(dir, "block_states.json")),
-      this.readJson<unknown>(path.join(dir, "commands.json")),
-      this.readJson<unknown>(path.join(dir, "registries.json")),
+  async loadVersionData(): Promise<McdocVersionData | undefined> {
+    const [metadata, blockStates, commands, registries] = await Promise.all([
+      this.readJson<Metadata>(path.join(this.basePath, "metadata.json")),
+      this.readJson<unknown>(path.join(this.basePath, "block_states.json")),
+      this.readJson<unknown>(path.join(this.basePath, "commands.json")),
+      this.readJson<unknown>(path.join(this.basePath, "registries.json")),
     ]);
 
-    if (blockStates === undefined && commands === undefined && registries === undefined) {
+    if (!metadata || (blockStates === undefined && commands === undefined && registries === undefined)) {
       return undefined;
     }
 
-    return { blockStates, commands, registries };
-  }
-
-  async listStoredVersions(): Promise<string[]> {
-    try {
-      const entries = await readdir(this.basePath, { withFileTypes: true });
-      return entries
-        .filter((e) => e.isDirectory())
-        .map((e) => e.name)
-        .filter((name) => name !== "temp");
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") return [];
-      throw error;
-    }
+    return { version: metadata.version, blockStates, commands, registries };
   }
 
   private async readJson<T>(filePath: string): Promise<T | undefined> {

@@ -25,6 +25,7 @@ export interface McdocSymbols {
 }
 
 export interface McdocVersionData {
+  readonly version: string;
   readonly blockStates: unknown;
   readonly commands: unknown;
   readonly registries: unknown;
